@@ -1,0 +1,15 @@
+[project]
+name = "virtual-tokyo"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "bpy",
+  "usd-core",
+  "pyproj",
+  "shapely",
+  "numpy",
+  "requests",
+]
+
+[dependency-groups]
+dev = ["pytest"]
