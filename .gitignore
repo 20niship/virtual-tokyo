@@ -7,3 +7,9 @@ __pycache__/
 .mypy_cache/
 *.egg-info/
 data/osm/
+# レンダリング結果などの画像は管理しない(テクスチャは assets/textures に置いて管理する)
+out/**/*.png
+out/**/*.jpg
+out/render/
+out/modules/
+out/preview/
