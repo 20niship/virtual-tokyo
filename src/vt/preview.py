@@ -49,7 +49,7 @@ def main():
     draw(L, ax)
     ax.set_title("OSM layers (m, origin=bbox center)  red=rail green=Yurikamome orange=Monorail")
     fig.savefig(OUT / "overview.png", bbox_inches="tight")
-    ax.set_xlim(-1000, 3300); ax.set_ylim(-3200, 1500)
+    ax.set_xlim(-1500, 3300); ax.set_ylim(-3200, 1500)
     fig.savefig(OUT / "odaiba.png", bbox_inches="tight")
     plt.close(fig)
 
