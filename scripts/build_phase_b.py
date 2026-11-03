@@ -7,7 +7,7 @@ from pathlib import Path
 
 from shapely.geometry import Point
 
-from vt import furniture, ground, rail, render, roads, usd_out
+from vt import bridges, furniture, ground, rails_c, render, roads, usd_out
 from vt.assemble import build_building
 from vt.geo import to_local
 from vt.layers import load
@@ -19,6 +19,7 @@ CENTER_LL = (139.7745, 35.6265)
 RADIUS = 750
 
 L = load()
+RB = bridges.install(L)      # レインボーブリッジ検出+首都高の桁/橋脚詳細化(roads.build_roads の前に必要)
 c = to_local(*CENTER_LL)
 area = Point(c).buffer(RADIUS)
 T = Terrain()
@@ -26,8 +27,9 @@ land = ground.land_polygon(L, area)
 W = dict(area=area, land=land, zf=T, center=c)
 g = ground.build_ground(L, W)
 r, edges, info = roads.build_roads(L, W)
-t = rail.build_rail(L, W)
-furn = furniture.build_furniture(L, W, edges, info, roads.CFG)
+W["edges"] = edges
+t, rail_insts = rails_c.build_rail(L, W)
+furn = furniture.build_furniture(L, W, edges, info, roads.CFG) + list(roads.elevated_roads.insts) + rail_insts
 usd_out.write_all_modules(log=lambda s: None)
 print("faces ground/roads/rail:", len(g.f), len(r.f), len(t.f), "furniture:", len(furn))
 paths = [usd_out.write_furniture(furn), usd_out.write_world_mesh("ground", g), usd_out.write_world_mesh("roads", r), usd_out.write_world_mesh("rail", t)]

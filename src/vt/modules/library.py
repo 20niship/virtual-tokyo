@@ -1,4 +1,4 @@
-from . import lib_bldg, lib_gf, lib_misc, lib_street, lib_wall, lib_win  # noqa: F401  (登録のため)
+from . import lib_bldg, lib_bridge, lib_gf, lib_misc, lib_street, lib_wall, lib_win  # noqa: F401  (登録のため)
 from .registry import REG, build
 
 _cache = {}
