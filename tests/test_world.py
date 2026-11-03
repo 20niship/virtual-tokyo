@@ -34,7 +34,7 @@ def test_sidewalk_off_and_bike_lane_switches():
 
 
 def test_crossing_gets_crosswalk_stopline_ramp_and_tactile():
-    m, edges = roads.build_roads(_cross(), _world(), dict(roads.CFG, barrier_free_rate=1.0, tactile_rate=1.0))
+    m, edges, info = roads.build_roads(_cross(), _world(), dict(roads.CFG, barrier_free_rate=1.0, tactile_rate=1.0))
     mats = set(m.m)
     assert {"asphalt", "paint_road_white", "decal_tbs_dot"} <= mats | {"asphalt"}
     assert "paint_road_white" in mats and "decal_tbs_dot" in mats

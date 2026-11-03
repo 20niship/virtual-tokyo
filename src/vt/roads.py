@@ -361,7 +361,7 @@ def build_ground_roads(edges, world, cfg, nodes_deg, rng):
         _edge_markings(mesh, e, zm, node_clear, rng, cfg)
     for d in deco:
         _crossing(mesh, d, zm, rng, cfg)
-    return mesh, cw, swacc
+    return mesh, cw, swacc, deco
 
 
 def _ramp(mesh, R, n, ch, zf, tactile):
@@ -566,7 +566,7 @@ def deck_z(edge_line, zf, level_h, za, zb, base_a, base_b):
     return z
 
 
-def elevated_roads(edges, world, cfg, rng):
+def elevated_roads(edges, world, cfg, rng, elev=None):
     zf, land = world["zf"], world["land"]
     mesh = Mesh()
     el = [e for e in edges if e.kind == "drive" and e.level > 0]
@@ -590,6 +590,8 @@ def elevated_roads(edges, world, cfg, rng):
         zfn = deck_z(e.line, zf, Hl, ga + nh[e.a], gb + nh[e.b], ga, gb)
         S = [e.line.length * i / n for i in range(n + 1)]
         zs = [zfn(s) for s in S]
+        if elev is not None:
+            elev[e.id] = (S, zs, p)
         hw = p.half + (1.0 if p.lanes >= 1 else 0.5)
         hw = max(hw, 3.0)
         # 下端の厚み: 地面近く(スロープ端)では薄くして地中に潜らせない
@@ -631,7 +633,8 @@ def elevated_roads(edges, world, cfg, rng):
 def build_roads(L, world, cfg=CFG):
     rng = random.Random(cfg["seed"])
     edges = build_edges(L["roads"], world["area"], cfg)
-    m1, cw, sw = build_ground_roads(edges, world, cfg, None, rng)
-    m2 = elevated_roads(edges, world, cfg, rng)
+    m1, cw, sw, arms = build_ground_roads(edges, world, cfg, None, rng)
+    elev = {}
+    m2 = elevated_roads(edges, world, cfg, rng, elev)
     m1.add(m2)
-    return m1, edges
+    return m1, edges, dict(cw=cw, sw=sw, arms=arms, elev=elev)

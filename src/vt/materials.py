@@ -73,3 +73,26 @@ for _n in ("arrow_straight", "arrow_left", "arrow_right", "arrow_straight_left",
            "speed_30", "speed_40", "speed_50", "speed_60", "diamond", "triangle", "bike_symbol", "bikelane_blue", "tbs_line", "tbs_dot", "manhole"):
     MATERIALS["decal_" + _n] = dict(color="#ffffff", rough=0.6 if _n not in ("tbs_line", "tbs_dot") else 0.7, metal=0.0, tex=_n + ".png", size=None, alpha=True,
                                     wear="paint_wear.png" if not _n.startswith(("tbs", "manhole", "bikelane")) else None, wear_size=2.5)
+
+# ---- 道路ファニチャ ----
+MATERIALS.update({
+    "sig_red": M("#ff2a1a", 0.3, emit=("#ff2a1a", 25.0)),
+    "sig_yellow": M("#ffb200", 0.3, emit=("#ffb200", 25.0)),
+    "sig_green": M("#2dffa0", 0.3, emit=("#2dffa0", 25.0)),     # 日本の「青信号」は青緑
+    "sig_lens_dark": M("#12181a", 0.12, 0.0),
+    "sig_white_icon": M("#ffffff", 0.4, emit=("#ffffff", 14.0)),
+    "sig_amber_digit": M("#ff9a00", 0.4, emit=("#ff9a00", 14.0)),
+    "sig_housing_old": M("#4c5648", 0.55, 0.2, dirt=1),        # 旧式: くすんだ緑灰の鋳物/鋼板
+    "sig_housing_led": M("#2d3234", 0.5, 0.1, dirt=1),
+    "sig_housing_slim": M("#e6e8e6", 0.45, 0.1, dirt=1),       # 薄型: 白/淡灰
+    "sig_housing_slim_black": M("#1d1f20", 0.45, 0.1),
+    "sig_backplate": M("#17191a", 0.6, 0.0),
+    "sig_reflect": M("#e8e4d0", 0.4, 0.0),
+    "pole_dark": M("#3a3c3d", 0.5, 0.6, dirt=1, rust=1),
+    "pole_white": M("#dcdedb", 0.45, 0.6, dirt=1, rust=1),
+    "pole_brown": M("#4a3a30", 0.5, 0.5, dirt=1),
+    "lamp_lens": M("#e8ece8", 0.1, 0.0),
+    "lamp_globe": M("#f0f0ea", 0.25, 0.0),
+    "sign_atlas": dict(color="#ffffff", rough=0.28, metal=0.0, tex="sign_atlas.png", size=None, alpha=True),
+    "sign_back": M("#9ea3a5", 0.45, 0.8, dirt=1),
+})

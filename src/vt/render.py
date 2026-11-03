@@ -349,7 +349,7 @@ def gallery(names, out, cols=4, res=(1800, 1000), samples=64, label=True, yaw=18
     # 壁の背後に薄い白壁(空抜け防止) と床
     W_all = cols * sx
     H_all = rows * sz
-    dist = max(W_all * 0.95, H_all * 1.9) * 1.3 + 4
+    dist = max(W_all * 0.95, H_all * 1.9) * 1.3 + 1.5 * max(maxw, maxh)
     cx, cz = 0, (rows - 1) * sz / 2 + maxh / 2
     cam_loc = (cx + dist * math.sin(math.radians(yaw)), dist * math.cos(math.radians(yaw)), cz + dist * math.sin(math.radians(pitch)))
     add_camera(cam_loc, (cx, 0, cz), lens=45)
@@ -448,3 +448,17 @@ def add_buildings(builts):
             o = bpy.data.objects.new(i.name, me)
             o.location = (i.x, i.y, i.z + b.meta.get("zbase", 0.0)); o.rotation_euler = (0, 0, i.rot); o.scale = (i.sx, i.sy, i.sz)
             o["bvar"] = b.meta["bvar"]; col.objects.link(o)
+
+
+def add_instances(insts):
+    """配置済みインスタンス(Inst)をそのままシーンへ(道路ファニチャ等)"""
+    from .modules.library import get
+    cache, col = {}, bpy.context.scene.collection
+    for i in insts:
+        me = cache.get(i.name)
+        if me is None:
+            me = cache[i.name] = mesh_to_bpy(i.name, get(i.name))
+        o = bpy.data.objects.new(i.name, me)
+        o.location = (i.x, i.y, i.z); o.rotation_euler = (0, 0, i.rot); o.scale = (i.sx, i.sy, i.sz)
+        o["bvar"] = 0.5
+        col.objects.link(o)

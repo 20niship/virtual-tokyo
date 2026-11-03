@@ -26,7 +26,7 @@ def _newell(p):
 
 class Mesh:
     def __init__(s):
-        s.v, s.f, s.m, s.uv = [], [], [], []   # uv: 面ごとの頂点UV列(None=自動のボックス投影[m])
+        s.v, s.f, s.m, s.uv, s.lights = [], [], [], [], []   # lights: USD光源の記述。uv: 面ごとの頂点UV列(None=自動のボックス投影[m])
 
     def quad(s, a, b, c, d, mat, uv=None):
         s.poly([a, b, c, d], mat, uv)
@@ -45,12 +45,32 @@ class Mesh:
             uv = uv[::-1] if uv else None
         s.poly(pts, mat, uv)
 
+    def lathe(s, cx, cy, z0, prof, mat, n=16):
+        """z軸まわりの回転体。prof=[(r,dz)...]を下から上へ(外面)。(cx,cy,z0)が基準"""
+        for i in range(len(prof) - 1):
+            (r0, d0), (r1, d1) = prof[i], prof[i + 1]
+            if r0 <= 1e-9 and r1 <= 1e-9:
+                continue
+            dr, dz = r1 - r0, d1 - d0
+            for k in range(n):
+                a0, a1 = 2 * math.pi * k / n, 2 * math.pi * (k + 1) / n
+                P = lambda r, d, a: (cx + r * math.cos(a), cy + r * math.sin(a), z0 + d)
+                am = (a0 + a1) / 2
+                out = (dz * math.cos(am), dz * math.sin(am), -dr)
+                pts = [P(r0, d0, a0), P(r0, d0, a1), P(r1, d1, a1), P(r1, d1, a0)]
+                if r0 <= 1e-9:
+                    pts = [P(r0, d0, a0), P(r1, d1, a1), P(r1, d1, a0)]
+                elif r1 <= 1e-9:
+                    pts = [P(r0, d0, a0), P(r0, d0, a1), P(r1, d1, a0)]
+                s.oriented(pts, out, mat)
+
     def transformed(s, rot=0.0, tx=0.0, ty=0.0, tz=0.0):
         """z軸回りrot回転+平行移動した複製"""
         c, sn = math.cos(rot), math.sin(rot)
         o = Mesh()
         o.v = [(x * c - y * sn + tx, x * sn + y * c + ty, z + tz) for x, y, z in s.v]
         o.f, o.m, o.uv = list(s.f), list(s.m), list(s.uv)
+        o.lights = [dict(l, pos=(l["pos"][0] * c - l["pos"][1] * sn + tx, l["pos"][0] * sn + l["pos"][1] * c + ty, l["pos"][2] + tz)) for l in s.lights]
         return o
 
     def bbox(s, x0, y0, z0, x1, y1, z1, mat, b):

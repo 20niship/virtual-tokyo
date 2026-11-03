@@ -6,15 +6,15 @@ REG = {}  # name -> dict(fn, W, H, cat)
 T = 0.25  # 壁厚(y: -T..0)
 
 
-def mod(name, W=3.6, H=3.5, cat="misc"):
+def mod(name, W=3.6, H=3.5, cat="misc", **meta):
     def deco(fn):
-        REG[name] = dict(fn=fn, W=W, H=H, cat=cat)
+        REG[name] = dict(fn=fn, W=W, H=H, cat=cat, **meta)
         return fn
     return deco
 
 
-def reg(name, fn, W=3.6, H=3.5, cat="misc"):
-    REG[name] = dict(fn=fn, W=W, H=H, cat=cat)
+def reg(name, fn, W=3.6, H=3.5, cat="misc", **meta):
+    REG[name] = dict(fn=fn, W=W, H=H, cat=cat, **meta)
 
 
 def build(name):

@@ -3,7 +3,7 @@ import math
 from pathlib import Path
 
 import numpy as np
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdShade, Vt
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdShade, Vt
 
 from .materials import MATERIALS
 
@@ -113,12 +113,44 @@ def write_module(name, mesh, meta):
     p.CreateAttribute("vt:module_type", Sdf.ValueTypeNames.String).Set(meta["cat"])
     p.CreateAttribute("vt:span_w", Sdf.ValueTypeNames.Float).Set(float(meta["W"]))
     p.CreateAttribute("vt:height", Sdf.ValueTypeNames.Float).Set(float(meta["H"]))
-    mats = define_materials(st, f"/{name}/Materials", only=set(mesh.m))
-    _mesh_prims(st, f"/{name}/Geom", UsdGeom.Scope.Define(st, f"/{name}/Geom").GetPath().pathString, mesh, mats) if False else None
+    mats = define_materials(st, f"/{name}/Materials", only=set(mesh.m), texdir="../textures")
     UsdGeom.Scope.Define(st, f"/{name}/Geom")
     _mesh_prims(st, f"/{name}/Geom", mesh, mats)
+    _write_lights(st, f"/{name}/Lights", getattr(mesh, "lights", []))
     st.GetRootLayer().Save()
     return path
+
+
+def _write_lights(st, root, lights):
+    """UsdLux光源。光束[lm]からランバート面光源の輝度(nit)を換算: 球 Φ=4π²r²L / 円盤 Φ=π²r²L / 矩形 Φ=π·w·h·L。+Z方向を向くように回転"""
+    if not lights:
+        return
+    UsdGeom.Scope.Define(st, root)
+    for i, l in enumerate(lights):
+        path = f"{root}/light{i}"
+        kind, lm = l["type"], l["lumens"]
+        r = max(l.get("radius", 0.05), 1e-3)
+        if kind == "sphere":
+            lt = UsdLux.SphereLight.Define(st, path); lt.CreateRadiusAttr(r)
+            L = lm / (4 * math.pi ** 2 * r * r)
+        elif kind == "disk":
+            lt = UsdLux.DiskLight.Define(st, path); lt.CreateRadiusAttr(r)
+            L = lm / (math.pi ** 2 * r * r)
+        else:
+            w, h = l.get("size", (0.1, 0.1))
+            lt = UsdLux.RectLight.Define(st, path); lt.CreateWidthAttr(w); lt.CreateHeightAttr(h)
+            L = lm / (math.pi * w * h)
+        lt.CreateIntensityAttr(float(L))
+        lt.CreateColorAttr(Gf.Vec3f(*l["color"]))
+        if l.get("cct"):
+            lt.CreateEnableColorTemperatureAttr(True); lt.CreateColorTemperatureAttr(float(l["cct"]))
+        lt.GetPrim().CreateAttribute("vt:lumens", Sdf.ValueTypeNames.Float).Set(float(lm))
+        x = UsdGeom.Xformable(lt.GetPrim())
+        x.AddTranslateOp().Set(Gf.Vec3d(*l["pos"]))
+        d = Gf.Vec3d(*l.get("dir", (0, 0, -1)))
+        if d.GetLength() > 0:
+            rot = Gf.Rotation(Gf.Vec3d(0, 0, -1), d.GetNormalized())
+            x.AddOrientOp().Set(Gf.Quatf(rot.GetQuat()))
 
 
 def write_all_modules(log=print):
@@ -154,6 +186,32 @@ def write_city(layers, path=None):
     UsdGeom.SetStageUpAxis(st, UsdGeom.Tokens.z); UsdGeom.SetStageMetersPerUnit(st, 1.0)
     for p in layers:
         st.GetRootLayer().subLayerPaths.append(f"./{Path(p).name}")
+    st.GetRootLayer().Save()
+    return path
+
+
+def write_furniture(insts, path=None):
+    """道路ファニチャ(信号/街灯/標識)の全インスタンスを1つのPointInstancerで。モジュール側に UsdLux 光源を持つ"""
+    OUTDIR.mkdir(parents=True, exist_ok=True)
+    path = path or OUTDIR / "furniture.usda"
+    st = Usd.Stage.CreateNew(str(path))
+    UsdGeom.SetStageUpAxis(st, UsdGeom.Tokens.z); UsdGeom.SetStageMetersPerUnit(st, 1.0)
+    UsdGeom.Xform.Define(st, "/City"); st.SetDefaultPrim(st.GetPrimAtPath("/City"))
+    UsdGeom.Xform.Define(st, "/City/Furniture")
+    pi = UsdGeom.PointInstancer.Define(st, "/City/Furniture/Instances")
+    UsdGeom.Scope.Define(st, "/City/Furniture/Instances/Prototypes")
+    names = sorted({i.name for i in insts})
+    protos = []
+    for n in names:
+        pp = f"/City/Furniture/Instances/Prototypes/{n}"
+        st.DefinePrim(pp, "Xform").GetReferences().AddReference(f"../../assets/modules/{n}.usdc")
+        protos.append(Sdf.Path(pp))
+    pi.CreatePrototypesRel().SetTargets(protos)
+    ix = {n: i for i, n in enumerate(names)}
+    pi.CreateProtoIndicesAttr(Vt.IntArray([ix[i.name] for i in insts]))
+    pi.CreatePositionsAttr(Vt.Vec3fArray([Gf.Vec3f(i.x, i.y, i.z) for i in insts]))
+    pi.CreateOrientationsAttr(Vt.QuathArray([Gf.Quath(math.cos(i.rot / 2), 0, 0, math.sin(i.rot / 2)) for i in insts]))
+    pi.CreateScalesAttr(Vt.Vec3fArray([Gf.Vec3f(i.sx, i.sy, i.sz) for i in insts]))
     st.GetRootLayer().Save()
     return path
 
