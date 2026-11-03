@@ -330,9 +330,47 @@ def road_decals():
 
 
 def main():
-    asphalt(); sidewalk(); concrete(); ballast(); ground(); paint_wear(); markings(); road_decals()
+    asphalt(); sidewalk(); concrete(); ballast(); ground(); paint_wear(); markings(); road_decals(); ads()
     print(sorted(p.name for p in OUT.glob("*.png")))
 
 
 if __name__ == "__main__":
     main()
+
+
+# ---------- 広告アトラス(野立て看板・サイネージ・バス停広告用。架空のブランド名のみ) ----------
+AD_PANELS = [
+    ("SALE", "#d8231f", "#ffffff"), ("OPEN", "#1b4fa8", "#ffffff"), ("海辺の街で、あそぼう。", "#0b7a8a", "#ffffff"), ("DAIBA", "#222b3a", "#ffd23f"),
+    ("ご当地グルメ", "#e8a317", "#2a1d0a"), ("新生活応援", "#6b4aa8", "#ffffff"), ("SUMMER FES", "#ff5b7f", "#ffffff"), ("ゆったり温泉", "#2e7d4f", "#f7f3e6"),
+    ("BAYSIDE", "#0a2342", "#8fd3ff"), ("ショッピング", "#c2185b", "#fff1f6"), ("EV CHARGE", "#00a86b", "#ffffff"), ("駐車場 P", "#1b4fa8", "#ffffff"),
+    ("Cafe & Dining", "#4e342e", "#ffe9c7"), ("Tokyo Night View", "#101820", "#ffb703"), ("安全第一", "#f2c500", "#111111"), ("お台場マップ", "#eef2f5", "#1b4fa8"),
+]
+AD_CELL = (512, 256)
+
+
+def ads():
+    import json
+    cols = 4
+    rows = (len(AD_PANELS) + cols - 1) // cols
+    W, H = AD_CELL[0] * cols, AD_CELL[1] * rows
+    im = Image.new("RGB", (W, H))
+    meta = {"size": [W, H], "panels": []}
+    fp = None
+    for line in subprocess.run(["fc-list", ":lang=ja", "file"], capture_output=True, text=True).stdout.splitlines():
+        if "NotoSansCJK-Bold" in line:
+            fp = line.split(":")[0].strip()
+            break
+    for i, (txt, bg, fg) in enumerate(AD_PANELS):
+        x, y = (i % cols) * AD_CELL[0], (i // cols) * AD_CELL[1]
+        d = ImageDraw.Draw(im)
+        d.rectangle((x, y, x + AD_CELL[0] - 1, y + AD_CELL[1] - 1), fill=bg)
+        # 帯・グラデ風の装飾
+        for k in range(6):
+            d.polygon([(x + 320 + k * 30, y), (x + 360 + k * 30, y), (x + 200 + k * 30, y + AD_CELL[1]), (x + 160 + k * 30, y + AD_CELL[1])], fill=tuple(min(255, int(int(bg[j:j + 2], 16) * (1.0 + 0.04 * k))) for j in (1, 3, 5)))
+        d.rectangle((x + 8, y + 8, x + AD_CELL[0] - 9, y + AD_CELL[1] - 9), outline=fg, width=4)
+        f = ImageFont.truetype(fp, 64 if len(txt) < 8 else 44, index=0) if fp else ImageFont.load_default()
+        d.text((x + AD_CELL[0] / 2, y + AD_CELL[1] / 2), txt, font=f, fill=fg, anchor="mm")
+        meta["panels"].append(dict(name=txt, uv=[x / W, 1 - (y + AD_CELL[1]) / H, (x + AD_CELL[0]) / W, 1 - y / H]))
+    OUT.mkdir(parents=True, exist_ok=True)
+    im.save(OUT / "ad_atlas.png", optimize=True)
+    (OUT / "ad_atlas.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1))
