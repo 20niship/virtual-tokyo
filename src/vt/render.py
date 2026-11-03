@@ -204,6 +204,8 @@ def _textured(nt, bsdf, d, base, texc, objinfo):
 def mesh_to_bpy(name, mesh):
     mats = sorted(set(mesh.m))
     me = bpy.data.meshes.new(name)
+    if not mesh.f:
+        return me
     verts = np.array(mesh.v, dtype=np.float32).reshape(-1, 3)
     nloops = [len(f) for f in mesh.f]
     me.vertices.add(len(verts))
