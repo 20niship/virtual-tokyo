@@ -114,3 +114,19 @@ MATERIALS.update({
     "vend_window": M("#f0f2ee", 0.3, emit=("#f0f2ee", 3.0)),
     "ground_slab": M("#8f8d88", 0.9, bump=0.6, dirt=1),
 })
+
+# ---- 道路ファニチャ2(安全施設・電柱・街具・看板) ----
+MATERIALS.update({
+    "ad_atlas": dict(color="#ffffff", rough=0.35, metal=0.0, tex="ad_atlas.png", size=None, alpha=False),
+    "mirror": M("#8aa4b8", 0.03, 1.0),
+    "reflector_orange": M("#ff7a00", 0.3, emit=("#ff7a00", 0.6)),
+    "reflector_white": M("#f4f4f0", 0.3, emit=("#ffffff", 0.4)),
+    "guard_white": M("#e8eae6", 0.5, 0.5, dirt=1),
+    "post_red": M("#c8201c", 0.35, 0.3, dirt=1),
+    "cabinet_green": M("#4a6a55", 0.55, 0.3, dirt=1),
+    "pole_concrete": M("#a9a9a4", 0.9, bump=0.5, dirt=1),
+    "insulator": M("#d9d9d2", 0.2, 0.0),
+    "wire": M("#17181a", 0.6, 0.2),
+    "bench_wood": M("#8a6a44", 0.7, wood=1, vary=["#8a6a44", "#6b4f33", "#a98b62"]),
+    "rubber_yellow": M("#f2c500", 0.8),
+})

@@ -10,7 +10,7 @@ from shapely.geometry import Point
 from vt import bridges, furniture, ground, rails_c, render, roads, usd_out
 from vt.assemble import build_building
 from vt.geo import to_local
-from vt.layers import load
+from vt.layers import load, load_extra
 from vt.world import Terrain
 
 OUT = Path(__file__).resolve().parents[1] / "out/render"
@@ -29,10 +29,13 @@ g = ground.build_ground(L, W)
 r, edges, info = roads.build_roads(L, W)
 W["edges"] = edges
 t, rail_insts = rails_c.build_rail(L, W)
-furn = furniture.build_furniture(L, W, edges, info, roads.CFG) + list(roads.elevated_roads.insts) + rail_insts
+X = load_extra()
+furn = furniture.build_furniture(L, W, edges, info, roads.CFG, X=X) + list(roads.elevated_roads.insts) + rail_insts
 usd_out.write_all_modules(log=lambda s: None)
 print("faces ground/roads/rail:", len(g.f), len(r.f), len(t.f), "furniture:", len(furn))
-paths = [usd_out.write_furniture(furn), usd_out.write_world_mesh("ground", g), usd_out.write_world_mesh("roads", r), usd_out.write_world_mesh("rail", t)]
+wires = furniture.build_furniture.wires
+print("OSM furniture:", furniture.build_furniture.stats)
+paths = ([usd_out.write_world_mesh("wires", wires)] if wires is not None and wires.f else []) + [usd_out.write_furniture(furn), usd_out.write_world_mesh("ground", g), usd_out.write_world_mesh("roads", r), usd_out.write_world_mesh("rail", t)]
 builts = [b for f in L["buildings"] if f.geom.centroid.within(area) for b in [build_building(f)] if b]
 paths.insert(0, usd_out.write_buildings(builts))
 usd_out.write_city(paths)
