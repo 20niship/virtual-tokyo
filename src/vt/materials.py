@@ -38,7 +38,38 @@ MATERIALS = {
     "led_white": M("#ffffff", 0.5, emit=("#fff2d8", 6.0)),
     "fabric": M("#b04a3a", 0.95, vary=["#b04a3a", "#2a4a7a", "#3a6a4a", "#d8d2c4", "#222222"]),
     "water": M("#1c3a48", 0.04, 0.0),
-    "asphalt": M("#2e2e30", 0.92, bump=1.0),
-    "ground": M("#5c5a56", 0.9, bump=0.5),
-    "sidewalk": M("#a09d96", 0.88, bump=0.5),
 }
+
+# ---- テクスチャ付き(assets/textures)。size=1タイルのメートル寸法(None=UV 0..1)、alpha=画像のアルファを使う、wear=かすれマスクを乗せる ----
+def T(png, size, rough=0.85, bump=0.0, **kw):
+    return dict(color="#808080", rough=rough, metal=0.0, tex=png, size=size, bump=bump, **kw)
+
+
+MATERIALS.update({
+    "ground": T("plaza.png", 4.0, 0.9, 0.3),
+    "sidewalk": T("sidewalk_paver.png", 2.4, 0.88, 0.4),
+    "asphalt": T("asphalt.png", 5.0, 0.92, 0.8),
+    "asphalt_worn": T("asphalt_worn.png", 5.0, 0.9, 0.8),
+    "sidewalk_paver": T("sidewalk_paver.png", 2.4, 0.88, 0.4),
+    "sidewalk_tile": T("sidewalk_tile.png", 2.4, 0.85, 0.3),
+    "sidewalk_asphalt": T("sidewalk_asphalt.png", 3.0, 0.9, 0.5),
+    "sidewalk_granite": T("sidewalk_granite.png", 2.4, 0.4, 0.2),
+    "concrete_tex": T("concrete.png", 4.0, 0.85, 0.5),
+    "concrete_formed": T("concrete_formed.png", 3.6, 0.85, 0.5),
+    "riprap": T("riprap_stone.png", 4.0, 0.9, 1.0),
+    "ballast": T("track_bed.png", (2.4, 3.2), 0.95, 1.0),
+    "grass": T("grass.png", 3.0, 0.95, 0.8),
+    "soil": T("soil.png", 3.0, 0.95, 0.6),
+    "gravel": T("gravel.png", 3.0, 0.95, 1.0),
+    "rail_steel": M("#6a5a4c", 0.45, 0.9, rust=1),
+    # 塗料: 色+かすれマスク(paint_wear.png)をアルファに
+    "paint_road_blue": dict(color="#2f6fb5", rough=0.65, metal=0.0, wear="paint_wear.png", wear_size=2.5),
+    "tbs_line_tiled": T("tbs_line.png", 0.3, 0.7, 0.8),
+    "tbs_dot_tiled": T("tbs_dot.png", 0.3, 0.7, 0.8),
+    "paint_road_white": dict(color="#eeeee6", rough=0.6, metal=0.0, wear="paint_wear.png", wear_size=2.5),
+    "paint_road_yellow": dict(color="#e2b400", rough=0.6, metal=0.0, wear="paint_wear.png", wear_size=2.5),
+})
+for _n in ("arrow_straight", "arrow_left", "arrow_right", "arrow_straight_left", "arrow_straight_right", "text_tomare", "text_bus", "text_jokou",
+           "speed_30", "speed_40", "speed_50", "speed_60", "diamond", "triangle", "bike_symbol", "bikelane_blue", "tbs_line", "tbs_dot", "manhole"):
+    MATERIALS["decal_" + _n] = dict(color="#ffffff", rough=0.6 if _n not in ("tbs_line", "tbs_dot") else 0.7, metal=0.0, tex=_n + ".png", size=None, alpha=True,
+                                    wear="paint_wear.png" if not _n.startswith(("tbs", "manhole", "bikelane")) else None, wear_size=2.5)

@@ -84,6 +84,8 @@ def get_material(mid):
         L(objinfo.outputs["Random"], ramp.inputs[0])
         L(ramp.outputs[0], bsdf.inputs["Base Color"])
         bsdf.inputs["Roughness"].default_value = 0.9
+    elif d.get("tex") or d.get("wear"):
+        _textured(nt, bsdf, d, base, texc, objinfo)
     else:
         mix = N("ShaderNodeMix"); mix.data_type = "RGBA"; mix.blend_type = "MULTIPLY"
         mix.inputs[0].default_value = 0.0
@@ -127,6 +129,78 @@ def get_material(mid):
     return mat
 
 
+TEXDIR = __import__("pathlib").Path(__file__).resolve().parents[2] / "assets/textures"
+_img_cache = {}
+
+
+def _image(name, noncolor=False):
+    key = (name, noncolor)
+    if key not in _img_cache:
+        im = bpy.data.images.load(str(TEXDIR / name))
+        if noncolor:
+            im.colorspace_settings.name = "Non-Color"
+        _img_cache[key] = im
+    return _img_cache[key]
+
+
+def _textured(nt, bsdf, d, base, texc, objinfo):
+    """画像テクスチャ(タイル/デカール)材質。UVはメートル(size指定)か0..1。"""
+    N, L = nt.nodes.new, nt.links.new
+
+    def mapping(size):
+        m = N("ShaderNodeMapping")
+        sx, sy = (size, size) if not isinstance(size, tuple) else size
+        m.inputs["Scale"].default_value = (1 / sx, 1 / sy, 1)
+        L(texc.outputs["UV"], m.inputs["Vector"])
+        return m
+    if d.get("tex"):
+        img = N("ShaderNodeTexImage"); img.image = _image(d["tex"])
+        img.extension = "REPEAT" if d.get("size") else "CLIP"
+        img.interpolation = "Linear"
+        if d.get("size"):
+            L(mapping(d["size"]).outputs[0], img.inputs["Vector"])
+        else:
+            L(texc.outputs["UV"], img.inputs["Vector"])
+        L(img.outputs["Color"], bsdf.inputs["Base Color"])
+        if d.get("alpha"):
+            alpha = img.outputs["Alpha"]
+        else:
+            alpha = None
+        if d.get("bump"):
+            bw = N("ShaderNodeRGBToBW"); L(img.outputs["Color"], bw.inputs[0])
+            bp = N("ShaderNodeBump"); bp.inputs["Strength"].default_value = min(1.0, d["bump"] * 0.5); bp.inputs["Distance"].default_value = 0.02
+            L(bw.outputs[0], bp.inputs["Height"]); L(bp.outputs[0], bsdf.inputs["Normal"])
+        # 汚れ・濃淡(低周波)で色ムラ
+        nz = N("ShaderNodeTexNoise"); nz.inputs["Scale"].default_value = 0.35; nz.inputs["Detail"].default_value = 4
+        L(texc.outputs["Object"], nz.inputs["Vector"])
+        mx = N("ShaderNodeMix"); mx.data_type = "RGBA"; mx.blend_type = "MULTIPLY"; mx.inputs[0].default_value = 0.35
+        L(img.outputs["Color"], mx.inputs[6]); L(nz.outputs["Color"], mx.inputs[7])
+        if not d.get("alpha"):
+            L(mx.outputs[2], bsdf.inputs["Base Color"])
+    else:
+        bsdf.inputs["Base Color"].default_value = base
+        alpha = None
+    if d.get("wear"):
+        wi = N("ShaderNodeTexImage"); wi.image = _image(d["wear"], True); wi.extension = "REPEAT"
+        wm = N("ShaderNodeMapping"); sz = d.get("wear_size", 2.5)
+        wm.inputs["Scale"].default_value = (1 / sz, 1 / sz, 1 / sz)
+        L(texc.outputs["Object"], wm.inputs["Vector"])
+        L(wm.outputs[0], wi.inputs["Vector"])
+        if alpha is not None:
+            mu = N("ShaderNodeMath"); mu.operation = "MULTIPLY"
+            L(alpha, mu.inputs[0]); L(wi.outputs["Color"], mu.inputs[1]); alpha = mu.outputs[0]
+        else:
+            alpha = wi.outputs["Color"]
+            # 塗装はかすれの部分が透けるように閾値
+            cr = N("ShaderNodeMath"); cr.operation = "SUBTRACT"; cr.inputs[1].default_value = 0.2
+            L(alpha, cr.inputs[0]); mu = N("ShaderNodeMath"); mu.operation = "MULTIPLY"; mu.inputs[1].default_value = 2.0
+            L(cr.outputs[0], mu.inputs[0]); alpha = mu.outputs[0]
+    if alpha is not None:
+        L(alpha, bsdf.inputs["Alpha"])
+    bsdf.inputs["Roughness"].default_value = d["rough"]
+    bsdf.inputs["Metallic"].default_value = d["metal"]
+
+
 def mesh_to_bpy(name, mesh):
     mats = sorted(set(mesh.m))
     me = bpy.data.meshes.new(name)
@@ -156,7 +230,12 @@ def mesh_to_bpy(name, mesh):
     face_of_loop = np.repeat(np.arange(len(mesh.f)), nloops)
     ax = np.abs(nrm[face_of_loop]).argmax(axis=1)
     u = np.where(ax == 0, P[:, 1], P[:, 0]); v = np.where(ax == 2, P[:, 1], P[:, 2])
-    uv.data.foreach_set("uv", np.stack([u, v], axis=1).ravel())
+    UV = np.stack([u, v], axis=1).astype(np.float32)
+    if any(x is not None for x in mesh.uv):
+        for k, x in enumerate(mesh.uv):
+            if x is not None:
+                UV[starts[k]:starts[k] + nloops[k]] = np.array(x, dtype=np.float32)
+    uv.data.foreach_set("uv", UV.ravel())
     for m in mats:
         me.materials.append(get_material(m))
     return me
@@ -164,7 +243,7 @@ def mesh_to_bpy(name, mesh):
 
 def init_scene(res=(1600, 900), samples=48, sun_dir=(0.45, -0.35, 0.8), gpu=True):
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    _mat_cache.clear()
+    _mat_cache.clear(); _img_cache.clear()
     sc = bpy.context.scene
     sc.render.engine = "CYCLES"
     sc.cycles.samples = samples
@@ -347,3 +426,25 @@ def build_district(builts, L, center, radius):
             col.objects.link(o)
             n_inst += 1
     return n_inst
+
+
+def add_mesh_object(name, mesh):
+    o = bpy.data.objects.new(name, mesh_to_bpy(name, mesh))
+    bpy.context.scene.collection.objects.link(o)
+    return o
+
+
+def add_buildings(builts):
+    """建物(モジュールのインスタンス)をシーンへ"""
+    from .modules.library import get
+    cache, col = {}, bpy.context.scene.collection
+    for b in builts:
+        so = bpy.data.objects.new(f"shell{b.id}", mesh_to_bpy(f"shell{b.id}", b.shell))
+        so["bvar"] = b.meta["bvar"]; col.objects.link(so)
+        for i in b.insts:
+            me = cache.get(i.name)
+            if me is None:
+                me = cache[i.name] = mesh_to_bpy(i.name, get(i.name))
+            o = bpy.data.objects.new(i.name, me)
+            o.location = (i.x, i.y, i.z + b.meta.get("zbase", 0.0)); o.rotation_euler = (0, 0, i.rot); o.scale = (i.sx, i.sy, i.sz)
+            o["bvar"] = b.meta["bvar"]; col.objects.link(o)

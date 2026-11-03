@@ -17,7 +17,7 @@ def _rgb(h):
     return Gf.Vec3f(*[int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)])
 
 
-def define_materials(stage, root="/Materials", only=None):
+def define_materials(stage, root="/Materials", only=None, texdir="../../assets/textures"):
     UsdGeom.Scope.Define(stage, root)
     out = {}
     for mid, d in MATERIALS.items():
@@ -31,6 +31,8 @@ def define_materials(stage, root="/Materials", only=None):
         sh.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(float(d["metal"]))
         if d.get("glass"):
             sh.CreateInput("opacity", Sdf.ValueTypeNames.Float).Set(0.25)
+        if d.get("tex"):
+            _tex(stage, m, sh, f"{root}/{mid}", d, texdir)
         if d.get("emit"):
             sh.CreateInput("emissiveColor", Sdf.ValueTypeNames.Color3f).Set(_rgb(d["emit"][0]) * d["emit"][1] * 0.3)
         m.CreateSurfaceOutput().ConnectToSource(sh.ConnectableAPI(), "surface")
@@ -38,24 +40,53 @@ def define_materials(stage, root="/Materials", only=None):
     return out
 
 
+def _tex(stage, mat, sh, path, d, texdir):
+    """UsdUVTexture(必要ならUsdTransform2dでメートル→タイル変換)をdiffuseColor(とアルファ)へ接続"""
+    rd = UsdShade.Shader.Define(stage, path + "/st")
+    rd.CreateIdAttr("UsdPrimvarReader_float2"); rd.CreateInput("varname", Sdf.ValueTypeNames.Token).Set("st")
+    src = rd.ConnectableAPI()
+    size = d.get("size")
+    if size:
+        sx, sy = (size, size) if not isinstance(size, tuple) else size
+        tr = UsdShade.Shader.Define(stage, path + "/xf")
+        tr.CreateIdAttr("UsdTransform2d")
+        tr.CreateInput("in", Sdf.ValueTypeNames.Float2).ConnectToSource(rd.ConnectableAPI(), "result")
+        tr.CreateInput("scale", Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(1 / sx, 1 / sy))
+        src = tr.ConnectableAPI()
+    tx = UsdShade.Shader.Define(stage, path + "/tex")
+    tx.CreateIdAttr("UsdUVTexture")
+    tx.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(Sdf.AssetPath(f"{texdir}/{d['tex']}"))
+    tx.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(src, "result" if size else "result")
+    tx.CreateInput("wrapS", Sdf.ValueTypeNames.Token).Set("repeat" if size else "clamp")
+    tx.CreateInput("wrapT", Sdf.ValueTypeNames.Token).Set("repeat" if size else "clamp")
+    tx.CreateOutput("rgb", Sdf.ValueTypeNames.Float3); tx.CreateOutput("a", Sdf.ValueTypeNames.Float)
+    sh.GetInput("diffuseColor").ConnectToSource(tx.ConnectableAPI(), "rgb")
+    if d.get("alpha"):
+        sh.CreateInput("opacity", Sdf.ValueTypeNames.Float).ConnectToSource(tx.ConnectableAPI(), "a")
+
+
 def _mesh_prims(stage, parent, mesh, mats, offset=(0, 0, 0)):
     """材質ごとに1つのUsdGeomMeshを作る(フラット法線 + ボックス投影UV[m])"""
     by = {}
-    for f, m in zip(mesh.f, mesh.m):
-        by.setdefault(m, []).append(f)
+    uvs = mesh.uv if len(mesh.uv) == len(mesh.f) else [None] * len(mesh.f)
+    for f, m, u in zip(mesh.f, mesh.m, uvs):
+        by.setdefault(m, []).append((f, u))
     for mat, faces in by.items():
         pts, counts, idx, nrm, uv = [], [], [], [], []
-        for f in faces:
+        for f, fuv in faces:
             P = np.array([mesh.v[i] for i in f], dtype=np.float64)
             n = np.cross(P[1] - P[0], P[2] - P[0]) if len(f) >= 3 else np.zeros(3)
             ln = np.linalg.norm(n)
             n = n / ln if ln > 1e-12 else np.array([0, 0, 1.0])
             ax = int(np.abs(n).argmax())
             base = len(pts)
-            for p in P:
+            for k, p in enumerate(P):
                 pts.append(Gf.Vec3f(*(p + offset)))
                 nrm.append(Gf.Vec3f(*n))
-                u, v = ((p[1], p[2]) if ax == 0 else (p[0], p[2]) if ax == 1 else (p[0], p[1]))
+                if fuv is not None:
+                    u, v = fuv[k]
+                else:
+                    u, v = ((p[1], p[2]) if ax == 0 else (p[0], p[2]) if ax == 1 else (p[0], p[1]))
                 uv.append(Gf.Vec2f(float(u), float(v)))
             counts.append(len(f))
             idx.extend(range(base, base + len(f)))
@@ -99,6 +130,32 @@ def write_all_modules(log=print):
         paths.append(write_module(n, m, r))
         log(f"[{i}/{len(REG)}] {n}: {len(m.f)} faces -> {paths[-1].relative_to(ROOT)}")
     return paths
+
+
+def write_world_mesh(name, mesh, path=None):
+    """地面/道路/線路など1つの大きなメッシュ → out/usd/<name>.usda (材質ごとにMesh、テクスチャは相対パス)"""
+    OUTDIR.mkdir(parents=True, exist_ok=True)
+    path = path or OUTDIR / f"{name}.usdc"
+    st = Usd.Stage.CreateNew(str(path))
+    UsdGeom.SetStageUpAxis(st, UsdGeom.Tokens.z); UsdGeom.SetStageMetersPerUnit(st, 1.0)
+    root = UsdGeom.Xform.Define(st, f"/City/{name.capitalize()}")
+    UsdGeom.Xform.Define(st, "/City"); st.SetDefaultPrim(st.GetPrimAtPath("/City"))
+    mats = define_materials(st, "/City/Materials", only=set(mesh.m))
+    UsdGeom.Scope.Define(st, f"/City/{name.capitalize()}/Geom")
+    _mesh_prims(st, f"/City/{name.capitalize()}/Geom", mesh, mats)
+    st.GetRootLayer().Save()
+    return path
+
+
+def write_city(layers, path=None):
+    """各レイヤーUSDを束ねるルート(city.usda)"""
+    path = path or OUTDIR / "city.usda"
+    st = Usd.Stage.CreateNew(str(path))
+    UsdGeom.SetStageUpAxis(st, UsdGeom.Tokens.z); UsdGeom.SetStageMetersPerUnit(st, 1.0)
+    for p in layers:
+        st.GetRootLayer().subLayerPaths.append(f"./{Path(p).name}")
+    st.GetRootLayer().Save()
+    return path
 
 
 def write_buildings(builts, path=None):

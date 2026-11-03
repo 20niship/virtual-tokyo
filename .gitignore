@@ -13,3 +13,4 @@ out/**/*.jpg
 out/render/
 out/modules/
 out/preview/
+data/dem/

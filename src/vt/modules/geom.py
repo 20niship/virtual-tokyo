@@ -26,22 +26,32 @@ def _newell(p):
 
 class Mesh:
     def __init__(s):
-        s.v, s.f, s.m = [], [], []
+        s.v, s.f, s.m, s.uv = [], [], [], []   # uv: 面ごとの頂点UV列(None=自動のボックス投影[m])
 
-    def quad(s, a, b, c, d, mat):
-        s.poly([a, b, c, d], mat)
+    def quad(s, a, b, c, d, mat, uv=None):
+        s.poly([a, b, c, d], mat, uv)
 
-    def poly(s, pts, mat):
+    def poly(s, pts, mat, uv=None):
         i = len(s.v)
         s.v.extend(pts)
         s.f.append(tuple(range(i, i + len(pts))))
         s.m.append(mat)
+        s.uv.append(uv)
 
-    def oriented(s, pts, outward, mat):
+    def oriented(s, pts, outward, mat, uv=None):
         n = _newell(pts)
         if n[0] * outward[0] + n[1] * outward[1] + n[2] * outward[2] < 0:
             pts = pts[::-1]
-        s.poly(pts, mat)
+            uv = uv[::-1] if uv else None
+        s.poly(pts, mat, uv)
+
+    def transformed(s, rot=0.0, tx=0.0, ty=0.0, tz=0.0):
+        """z軸回りrot回転+平行移動した複製"""
+        c, sn = math.cos(rot), math.sin(rot)
+        o = Mesh()
+        o.v = [(x * c - y * sn + tx, x * sn + y * c + ty, z + tz) for x, y, z in s.v]
+        o.f, o.m, o.uv = list(s.f), list(s.m), list(s.uv)
+        return o
 
     def bbox(s, x0, y0, z0, x1, y1, z1, mat, b):
         """12稜を面取りしたボックス(面6 + 稜12 + 隅8)"""
@@ -166,3 +176,4 @@ class Mesh:
         s.v.extend((x + tx, y + ty, z + tz) for x, y, z in o.v)
         s.f.extend(tuple(j + i for j in f) for f in o.f)
         s.m.extend(o.m)
+        s.uv.extend(o.uv)

@@ -81,7 +81,7 @@ def building_height(tags, rng):
 def load(data=None):
     data = data or fetch()
     rng = random.Random(0)
-    L = {k: [] for k in ("roads", "buildings", "building_parts", "rail", "water", "green", "stations", "coastline")}
+    L = {k: [] for k in ("roads", "buildings", "building_parts", "rail", "water", "green", "stations", "coastline", "landuse")}
     for el in data["elements"]:
         t = el.get("tags", {})
         if el["type"] == "node":
@@ -112,6 +112,8 @@ def load(data=None):
                 L["buildings"].append(f)
             elif t.get("natural") in ("water", "bay") or "water" in t:
                 L["water"].append(f)
+            elif t.get("amenity") == "parking" or (t.get("landuse") and t["landuse"] not in ("grass", "forest", "recreation_ground", "village_green")) or t.get("natural") in ("sand", "beach", "bare_rock") or t.get("man_made") in ("pier", "breakwater") or t.get("leisure") in ("swimming_pool", "stadium", "track", "marina"):
+                L["landuse"].append(f)
             elif t.get("landuse") in ("grass", "forest", "recreation_ground", "village_green") or t.get("leisure") in ("park", "garden", "pitch", "playground") or t.get("natural") in ("wood", "scrub"):
                 L["green"].append(f)
     return L
