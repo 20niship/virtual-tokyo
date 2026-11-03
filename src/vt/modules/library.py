@@ -1,4 +1,5 @@
 from . import lib_gf, lib_misc, lib_wall, lib_win  # noqa: F401  (登録のため)
+from . import lib_bridge  # noqa: F401  (フェーズC: 橋・駅)
 from .registry import REG, build
 
 _cache = {}

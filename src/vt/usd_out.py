@@ -113,7 +113,7 @@ def write_module(name, mesh, meta):
     p.CreateAttribute("vt:module_type", Sdf.ValueTypeNames.String).Set(meta["cat"])
     p.CreateAttribute("vt:span_w", Sdf.ValueTypeNames.Float).Set(float(meta["W"]))
     p.CreateAttribute("vt:height", Sdf.ValueTypeNames.Float).Set(float(meta["H"]))
-    mats = define_materials(st, f"/{name}/Materials", only=set(mesh.m))
+    mats = define_materials(st, f"/{name}/Materials", only=set(mesh.m), texdir="../textures")
     _mesh_prims(st, f"/{name}/Geom", UsdGeom.Scope.Define(st, f"/{name}/Geom").GetPath().pathString, mesh, mats) if False else None
     UsdGeom.Scope.Define(st, f"/{name}/Geom")
     _mesh_prims(st, f"/{name}/Geom", mesh, mats)
