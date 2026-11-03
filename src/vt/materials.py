@@ -114,3 +114,17 @@ MATERIALS.update({
     "vend_window": M("#f0f2ee", 0.3, emit=("#f0f2ee", 3.0)),
     "ground_slab": M("#8f8d88", 0.9, bump=0.6, dirt=1),
 })
+
+# ---- 植栽: 葉アトラス(alpha cutout・両面)・樹皮(手続きテクスチャ) ----
+MATERIALS.update({
+    "leaf_atlas": dict(color="#ffffff", rough=0.55, metal=0.0, tex="leaves_atlas.png", size=None, alpha=True, cutout=0.45, double_sided=True, foliage=True),
+    "foliage_core": M("#1f3418", 0.95),
+    "bark_furrow": T("bark_furrow.png", 1.0, 0.92, 1.0),
+    "bark_furrow_dark": T("bark_furrow_dark.png", 1.0, 0.92, 1.0),
+    "bark_smooth": T("bark_smooth.png", 0.8, 0.7, 0.4),
+    "bark_plane": T("bark_plane.png", 1.2, 0.8, 0.6),
+    "bark_pine": T("bark_pine.png", 0.9, 0.95, 1.0),
+    "bark_palm": T("bark_palm.png", 0.7, 0.9, 0.7),
+    "bark_shuro": T("bark_shuro.png", 0.6, 0.95, 0.5),
+    "tree_pit_iron": M("#2d2f31", 0.6, 0.8, rust=1),
+})

@@ -63,6 +63,8 @@ def _tex(stage, mat, sh, path, d, texdir):
     sh.GetInput("diffuseColor").ConnectToSource(tx.ConnectableAPI(), "rgb")
     if d.get("alpha"):
         sh.CreateInput("opacity", Sdf.ValueTypeNames.Float).ConnectToSource(tx.ConnectableAPI(), "a")
+        if d.get("cutout"):
+            sh.CreateInput("opacityThreshold", Sdf.ValueTypeNames.Float).Set(float(d["cutout"]))
 
 
 def _mesh_prims(stage, parent, mesh, mats, offset=(0, 0, 0)):
@@ -96,7 +98,9 @@ def _mesh_prims(stage, parent, mesh, mats, offset=(0, 0, 0)):
         g.CreateFaceVertexIndicesAttr(Vt.IntArray(idx))
         g.CreateNormalsAttr(Vt.Vec3fArray(nrm)); g.SetNormalsInterpolation("faceVarying")
         g.CreateSubdivisionSchemeAttr("none")
-        pv = UsdGeom.PrimvarsAPI(g).CreatePrimvar("st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.faceVarying)
+        if MATERIALS.get(mat, {}).get("double_sided"):
+            g.CreateDoubleSidedAttr(True)
+        pv =UsdGeom.PrimvarsAPI(g).CreatePrimvar("st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.faceVarying)
         pv.Set(Vt.Vec2fArray(uv))
         UsdShade.MaterialBindingAPI.Apply(g.GetPrim()).Bind(mats[mat])
 
@@ -250,5 +254,31 @@ def write_buildings(builts, path=None):
         pi.CreatePositionsAttr(Vt.Vec3fArray([Gf.Vec3f(i.x, i.y, i.z) for i in b.insts]))
         pi.CreateOrientationsAttr(Vt.QuathArray([Gf.Quath(math.cos(i.rot / 2), 0, 0, math.sin(i.rot / 2)) for i in b.insts]))
         pi.CreateScalesAttr(Vt.Vec3fArray([Gf.Vec3f(i.sx, i.sy, i.sz) for i in b.insts]))
+    st.GetRootLayer().Save()
+    return path
+
+
+def write_vegetation(insts, path=None):
+    """植栽(樹木・低木・生垣・地被)の全インスタンスを1つのPointInstancerで。各モジュールUSDは葉アトラス(alpha cutout・両面)を参照"""
+    OUTDIR.mkdir(parents=True, exist_ok=True)
+    path = path or OUTDIR / "vegetation.usda"
+    st = Usd.Stage.CreateNew(str(path))
+    UsdGeom.SetStageUpAxis(st, UsdGeom.Tokens.z); UsdGeom.SetStageMetersPerUnit(st, 1.0)
+    UsdGeom.Xform.Define(st, "/City"); st.SetDefaultPrim(st.GetPrimAtPath("/City"))
+    UsdGeom.Xform.Define(st, "/City/Vegetation")
+    pi = UsdGeom.PointInstancer.Define(st, "/City/Vegetation/Instances")
+    UsdGeom.Scope.Define(st, "/City/Vegetation/Instances/Prototypes")
+    names = sorted({i.name for i in insts})
+    protos = []
+    for n in names:
+        pp = f"/City/Vegetation/Instances/Prototypes/{n}"
+        st.DefinePrim(pp, "Xform").GetReferences().AddReference(f"../../assets/modules/{n}.usdc")
+        protos.append(Sdf.Path(pp))
+    pi.CreatePrototypesRel().SetTargets(protos)
+    ix = {n: i for i, n in enumerate(names)}
+    pi.CreateProtoIndicesAttr(Vt.IntArray([ix[i.name] for i in insts]))
+    pi.CreatePositionsAttr(Vt.Vec3fArray([Gf.Vec3f(i.x, i.y, i.z) for i in insts]))
+    pi.CreateOrientationsAttr(Vt.QuathArray([Gf.Quath(math.cos(i.rot / 2), 0, 0, math.sin(i.rot / 2)) for i in insts]))
+    pi.CreateScalesAttr(Vt.Vec3fArray([Gf.Vec3f(i.sx, i.sy, i.sz) for i in insts]))
     st.GetRootLayer().Save()
     return path
