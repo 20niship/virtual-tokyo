@@ -164,7 +164,7 @@ def write_buildings(builts, path=None):
     st = Usd.Stage.CreateNew(str(path))
     UsdGeom.SetStageUpAxis(st, UsdGeom.Tokens.z); UsdGeom.SetStageMetersPerUnit(st, 1.0)
     root = UsdGeom.Xform.Define(st, "/City"); st.SetDefaultPrim(root.GetPrim())
-    mats = define_materials(st, "/City/Materials", only={"core", "roof_membrane"})
+    mats = define_materials(st, "/City/Materials", only={"core", "roof_membrane"}.union(*(set(b.shell.m) for b in builts)))
     UsdGeom.Xform.Define(st, "/City/Buildings")
     for b in builts:
         bp = f"/City/Buildings/b{b.id}"

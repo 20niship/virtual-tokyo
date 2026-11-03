@@ -73,3 +73,21 @@ for _n in ("arrow_straight", "arrow_left", "arrow_right", "arrow_straight_left",
            "speed_30", "speed_40", "speed_50", "speed_60", "diamond", "triangle", "bike_symbol", "bikelane_blue", "tbs_line", "tbs_dot", "manhole"):
     MATERIALS["decal_" + _n] = dict(color="#ffffff", rough=0.6 if _n not in ("tbs_line", "tbs_dot") else 0.7, metal=0.0, tex=_n + ".png", size=None, alpha=True,
                                     wear="paint_wear.png" if not _n.startswith(("tbs", "manhole", "bikelane")) else None, wear_size=2.5)
+
+# ---- 建物ディテール追加(フェーズA2) ----
+MATERIALS.update({
+    "alu_bronze": M("#5a4636", 0.38, 0.95),
+    "roof_tile": M("#4a4f55", 0.6, vary=["#4a4f55", "#6b4a3a", "#3c3f44", "#55504a", "#7a5a44"], bump=0.8, dirt=1),
+    "glass_green": M("#1d3a34", 0.03, 0.0, glass=1),
+    "ceramic": M("#c9c3b6", 0.25, 0.0, vary=["#c9c3b6", "#b0a89a", "#8a8d90", "#a56a50", "#d8d4c8"], dirt=1),
+    "plant": M("#3f6b2e", 0.9, 0.0, vary=["#3f6b2e", "#4d7a35", "#2f5a28", "#6b8a3a"], bump=1.0),
+    "sign_red": M("#d8231f", 0.4, emit=("#d8231f", 1.5)),
+    "sign_blue": M("#1b4fa8", 0.4, emit=("#1b4fa8", 1.5)),
+    "sign_white": M("#f2f0ea", 0.4, emit=("#f2f0ea", 2.5)),
+    "sign_yellow": M("#f3c200", 0.4, emit=("#f3c200", 1.8)),
+    "vend_red": M("#c8201c", 0.35, 0.2),
+    "vend_blue": M("#1d4d9b", 0.35, 0.2),
+    "vend_white": M("#e6e6e2", 0.35, 0.2),
+    "vend_window": M("#f0f2ee", 0.3, emit=("#f0f2ee", 3.0)),
+    "ground_slab": M("#8f8d88", 0.9, bump=0.6, dirt=1),
+})
