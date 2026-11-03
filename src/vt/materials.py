@@ -114,3 +114,14 @@ MATERIALS.update({
     "vend_window": M("#f0f2ee", 0.3, emit=("#f0f2ee", 3.0)),
     "ground_slab": M("#8f8d88", 0.9, bump=0.6, dirt=1),
 })
+
+# ---- 路面の追加要素(右折レーン/バスレーン/道路鋲/劣化デカール/排水) ----
+MATERIALS.update({
+    "paint_road_bus": dict(color="#b0452e", rough=0.65, metal=0.0, wear="paint_wear.png", wear_size=2.5),
+    "cats_eye_white": M("#e8e8e0", 0.25, 0.4, emit=("#ffffff", 0.6)),
+    "cats_eye_yellow": M("#e2b400", 0.25, 0.4, emit=("#ffcc00", 0.6)),
+    "asphalt_rut": T("asphalt_rut.png", (4.0, 0.7), 0.7, 0.0, alpha=True),
+    "gutter": T("gutter.png", (1.0, 0.3), 0.85, 0.5),
+})
+for _n in ("asphalt_crack_1", "asphalt_crack_2", "asphalt_crack_3", "asphalt_patch_1", "asphalt_patch_2", "grating", "drain_inlet"):
+    MATERIALS["decal_" + _n] = dict(color="#ffffff", rough=0.85 if "asphalt" in _n else 0.5, metal=0.0, tex=_n + ".png", size=None, alpha=True, wear=None)

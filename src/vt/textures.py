@@ -170,11 +170,18 @@ def markings():
         im = rgba(120, 500); d = ImageDraw.Draw(im)
         if kind == "straight":
             d.polygon([(60, 0), (115, 150), (80, 150), (80, 500), (40, 500), (40, 150), (5, 150)], fill=W)
-        elif kind == "left":
-            d.polygon([(0, 120), (60, 20), (60, 90), (95, 90), (95, 500), (55, 500), (55, 130), (0, 120)][:0] or
-                      [(5, 110), (62, 10), (62, 70), (80, 70), (80, 500), (45, 500), (45, 110)], fill=W)
-        elif kind == "right":
-            d.polygon([(115, 110), (58, 10), (58, 70), (40, 70), (40, 500), (75, 500), (75, 110)], fill=W)
+        elif kind in ("left", "right"):
+            # 右左折専用: 縦の軸が上で斜めに曲がり、矢じりが進行方向の斜め前を向く(日本の路面標示の形)
+            sgn = 1 if kind == "right" else -1
+            cx = 60 - sgn * 22
+            pts = [(cx, 500), (cx, 280), (cx + sgn * 34, 170)]
+            d.line(pts, fill=W, width=34, joint="curve")
+            dx, dy = sgn * 34, -110.0
+            L = math.hypot(dx, dy); dx, dy = dx / L, dy / L
+            ex, ey = pts[-1]
+            ax, ay = ex + dx * 70, ey + dy * 70
+            px_, py_ = -dy, dx
+            d.polygon([(ax, ay), (ex + px_ * 46, ey + py_ * 46), (ex - px_ * 46, ey - py_ * 46)], fill=W)
         elif kind in ("straight_left", "straight_right"):
             d.polygon([(60, 0), (110, 120), (78, 120), (78, 500), (42, 500), (42, 120), (10, 120)], fill=W)
             if kind == "straight_left":
@@ -257,8 +264,73 @@ def markings():
     sym("manhole.png", im)
 
 
+def road_decals():
+    """路面の劣化デカール(ひび割れ/補修パッチ/わだち)と、排水設備(グレーチング/集水桝/側溝)"""
+    r = np.random.default_rng(90)
+
+    def walk_cracks(n, count, seed, branch=0.35):
+        im = Image.new("L", (n, n), 0); d = ImageDraw.Draw(im)
+        g = np.random.default_rng(seed)
+
+        def crack(x, y, ang, w, depth):
+            pts = [(x, y)]
+            for _ in range(int(g.integers(12, 28))):
+                ang += g.normal(0, 0.35); x += math.cos(ang) * g.uniform(8, 18); y += math.sin(ang) * g.uniform(8, 18)
+                pts.append((x, y))
+                if depth < 2 and g.random() < branch * 0.25:
+                    crack(x, y, ang + g.choice([-1, 1]) * g.uniform(0.5, 1.2), max(1, w - 1), depth + 1)
+            d.line(pts, fill=255, width=w)
+        for _ in range(count):
+            crack(g.uniform(0.15, 0.85) * n, g.uniform(0.15, 0.85) * n, g.uniform(0, 6.28), 3, 0)
+        return im
+    from PIL import ImageFilter
+    for k, (cnt, seed) in enumerate(((2, 1), (3, 2), (1, 3)), 1):
+        a = np.array(walk_cracks(512, cnt, seed).filter(ImageFilter.GaussianBlur(0.8))) / 255.0
+        rgba = np.zeros((512, 512, 4)); rgba[..., :3] = rgb("#101012"); rgba[..., 3] = np.clip(a * 0.85, 0, 1)
+        save(f"asphalt_crack_{k}.png", rgba, "RGBA")
+    # 補修パッチ(埋設工事の復旧跡: 切り口の線+やや黒い新しいアスファルト) 3m x 1m
+    for k, (w, h) in enumerate(((600, 200), (400, 400)), 1):
+        base = 0.10 + 0.05 * tnoise(512, 0.8, 100 + k)[:h, :w] if False else 0.1 + 0.05 * np.random.default_rng(100 + k).random((h, w))
+        rgba = np.zeros((h, w, 4)); rgba[..., :3] = base[..., None] * np.array([1, 1, 1.03]); rgba[..., 3] = 0.45
+        im = Image.fromarray((np.clip(rgba, 0, 1) * 255).astype(np.uint8), "RGBA"); dd = ImageDraw.Draw(im)
+        dd.rectangle((1, 1, w - 2, h - 2), outline=(40, 36, 34, 255), width=4)
+        dd.rectangle((8, 8, w - 9, h - 9), outline=(20, 20, 22, 160), width=2)
+        OUT.mkdir(parents=True, exist_ok=True); im.save(OUT / f"asphalt_patch_{k}.png", optimize=True)
+    # わだち(タイヤ通過帯の黒ずみ・磨き): u=進行方向 4m タイル, v=幅0.7m
+    n = 512
+    rut = np.zeros((n // 4, n, 4)); yy = np.linspace(-1, 1, n // 4)[:, None]
+    band = np.exp(-(yy * 1.6) ** 2)
+    streak = 0.6 + 0.4 * tnoise(n, 1.4, 120)[:n // 4]
+    rut[..., :3] = rgb("#0c0c0e"); rut[..., 3] = np.clip(band * streak * 0.16, 0, 1)
+    save("asphalt_rut.png", rut, "RGBA")
+    # グレーチング 0.3 x 0.6 m(横格子)
+    im = Image.new("RGBA", (200, 400), (0, 0, 0, 0)); dd = ImageDraw.Draw(im)
+    dd.rectangle((0, 0, 199, 399), fill=(58, 58, 60, 255), outline=(34, 34, 36, 255), width=6)
+    for i in range(12):
+        y = 22 + i * 30
+        dd.rectangle((16, y, 183, y + 16), fill=(14, 14, 16, 255))
+    im.save(OUT / "grating.png", optimize=True)
+    # 集水桝の蓋(円) 0.6m
+    im = Image.new("RGBA", (256, 256), (0, 0, 0, 0)); dd = ImageDraw.Draw(im)
+    dd.ellipse((4, 4, 251, 251), fill=(64, 64, 66, 255), outline=(30, 30, 32, 255), width=6)
+    for i in range(9):
+        y = 48 + i * 20
+        dd.line([(70, y), (186, y)], fill=(16, 16, 18, 255), width=7)
+    im.save(OUT / "drain_inlet.png", optimize=True)
+    # 側溝(U字溝の蓋): 1.0m x 0.3m タイル, 細いスリット
+    n1, n2 = 1000, 300
+    g = np.zeros((n2, n1, 3)); g[:] = rgb("#7c7b76") * (0.92 + 0.12 * np.random.default_rng(130).random((n2, n1)))[..., None]
+    gi = Image.fromarray((g * 255).astype(np.uint8)); dd = ImageDraw.Draw(gi)
+    dd.rectangle((0, 0, n1 - 1, 5), fill=(70, 70, 68)); dd.rectangle((0, n2 - 6, n1 - 1, n2 - 1), fill=(70, 70, 68))
+    for x in (0, 500):
+        dd.rectangle((x, 0, x + 3, n2), fill=(50, 50, 50))
+    for x in range(40, 480, 70):
+        dd.rectangle((x, 90, x + 40, 210), fill=(24, 24, 26)); dd.rectangle((x + 500, 90, x + 540, 210), fill=(24, 24, 26)) if x + 540 < n1 else None
+    gi.save(OUT / "gutter.png", optimize=True)
+
+
 def main():
-    asphalt(); sidewalk(); concrete(); ballast(); ground(); paint_wear(); markings()
+    asphalt(); sidewalk(); concrete(); ballast(); ground(); paint_wear(); markings(); road_decals()
     print(sorted(p.name for p in OUT.glob("*.png")))
 
 
