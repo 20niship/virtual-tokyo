@@ -14,3 +14,4 @@ out/render/
 out/modules/
 out/preview/
 data/dem/
+.claude/worktrees/
