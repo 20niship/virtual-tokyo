@@ -12,6 +12,9 @@ from .city import split_insts, split_mesh
 
 OUT = Path(__file__).resolve().parents[2] / "out/render/final"
 EYE = 1.65
+TIME = "day"        # day / dusk / night (build_realism.py --time)
+REALISM = True      # 雲・霞・水面・壁の汚れ・窓の室内・自動露出。False なら従来の見た目
+EV_TARGET = dict(day=0.12, dusk=0.08, night=0.03)   # 自動露出の目標(試し撮りの線形輝度の中央値)
 
 
 class View:
@@ -148,21 +151,22 @@ def pick_aerial_views(w):
     return vs
 
 
-def render_view(w, tiles, v, radius, samples=24, res=(1280, 720), extra=None):
+def render_view(w, tiles, v, radius, samples=24, res=(1280, 720), extra=None, dmin=None):
     """tiles=dict(kind→dict(tile→メッシュ/インスタンス)); カメラ周辺radius[m]のタイル/インスタンスのみ"""
     cx, cy = v.cam[0], v.cam[1]
-    render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65))
+    render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65), time=TIME, realism=REALISM)
     import bpy
     vs = bpy.context.scene.view_settings
-    vs.look = "AgX - Base Contrast"                                  # 谷間の道が黒く潰れないよう、高コントラストlookをやめる
+    vs.look = "AgX - Base Contrast" if not REALISM else "AgX - Medium High Contrast"      # 谷間の道が黒く潰れないよう、高コントラストlookをやめる
     vs.exposure = -1.8 if v.kind != "aerial" else -2.4
-    bpy.context.scene.world.node_tree.nodes["Background"].inputs[1].default_value *= 2.0 if v.kind != "aerial" else 1.0   # 空光(谷間の環境光)を強める
+    if not REALISM:
+        bpy.context.scene.world.node_tree.nodes["Background"].inputs[1].default_value *= 2.0 if v.kind != "aerial" else 1.0   # 空光(谷間の環境光)を強める
     for name in ("g", "r", "t"):
         for (i, j), m in tiles[name].items():
             if w["tiler"].box(i, j).distance(Point(cx, cy)) < radius:
                 render.add_mesh_object(f"{name}{i}_{j}", m)
     render.add_plane(80000, 0.0, "water", loc=w["center"])          # 水平線までつながる広い水面
-    dmin = 36.0 if v.kind != "aerial" else 0.0           # カメラに重なる人/車を除く(視界が潰れるため)
+    dmin = (36.0 if v.kind != "aerial" else 0.0) if dmin is None else dmin           # カメラに重なる人/車を除く(視界が潰れるため)
     near = lambda i: dmin < (i.x - cx) ** 2 + (i.y - cy) ** 2 < radius * radius
     sel = []
     for key in ("furn", "veg", "props"):
@@ -174,6 +178,9 @@ def render_view(w, tiles, v, radius, samples=24, res=(1280, 720), extra=None):
     render.add_buildings_gn(bl)
     render.add_camera(v.cam, v.tgt, v.lens)
     OUT.mkdir(parents=True, exist_ok=True)
+    if REALISM:
+        vs.exposure = -1.0 if TIME == "night" else render.estimate_exposure(EV_TARGET[TIME], hi=1.2 if TIME == "day" else 1.8)     # 夜は光源(窓・街灯)基準の固定露出
+        print(f"  exposure {vs.exposure:+.2f} EV")
     render.render(OUT / f"{v.name}.png")
 
 

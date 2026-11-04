@@ -220,6 +220,56 @@ def write_furniture(insts, path=None):
     return path
 
 
+BLDDIR = ROOT / "assets/buildings"
+
+
+def write_building_asset(b, path):
+    """1棟を単体の USD アセットとして書く(assets/buildings/b<id>.usda)。
+    シェル(躯体メッシュ)+モジュールは assets/modules/*.usdc への参照を持つ PointInstancer。座標は都市ローカル(m)のまま。"""
+    st = Usd.Stage.CreateNew(str(path))
+    UsdGeom.SetStageUpAxis(st, UsdGeom.Tokens.z); UsdGeom.SetStageMetersPerUnit(st, 1.0)
+    root = UsdGeom.Xform.Define(st, "/B"); st.SetDefaultPrim(root.GetPrim())
+    pr = root.GetPrim()
+    for k, v, t in (("vt:osm_id", b.id, Sdf.ValueTypeNames.Int64), ("vt:style", b.meta["style"], Sdf.ValueTypeNames.String),
+                    ("vt:levels", b.meta["floors"], Sdf.ValueTypeNames.Int), ("vt:height", float(b.meta["height"]), Sdf.ValueTypeNames.Float),
+                    ("vt:bvar", float(b.meta["bvar"]), Sdf.ValueTypeNames.Float)):
+        pr.CreateAttribute(k, t).Set(v)
+    mats = define_materials(st, "/B/Materials", only={"core", "roof_membrane"} | set(b.shell.m), texdir="../textures")
+    UsdGeom.Scope.Define(st, "/B/Shell")
+    _mesh_prims(st, "/B/Shell", b.shell, mats)
+    names = sorted({i.name for i in b.insts})
+    pi = UsdGeom.PointInstancer.Define(st, "/B/Modules")
+    UsdGeom.Scope.Define(st, "/B/Modules/Prototypes")
+    protos = []
+    for n in names:
+        pp = f"/B/Modules/Prototypes/{n}"
+        st.DefinePrim(pp, "Xform").GetReferences().AddReference(f"../modules/{n}.usdc")
+        protos.append(Sdf.Path(pp))
+    pi.CreatePrototypesRel().SetTargets(protos)
+    ix = {n: i for i, n in enumerate(names)}
+    pi.CreateProtoIndicesAttr(Vt.IntArray([ix[i.name] for i in b.insts]))
+    pi.CreatePositionsAttr(Vt.Vec3fArray([Gf.Vec3f(i.x, i.y, i.z) for i in b.insts]))
+    pi.CreateOrientationsAttr(Vt.QuathArray([Gf.Quath(math.cos(i.rot / 2), 0, 0, math.sin(i.rot / 2)) for i in b.insts]))
+    pi.CreateScalesAttr(Vt.Vec3fArray([Gf.Vec3f(i.sx, i.sy, i.sz) for i in b.insts]))
+    st.GetRootLayer().Save()
+    return path
+
+
+def write_buildings_ref(builts, path=None, assets=True):
+    """建物ごとの単体アセット(assets/buildings/)を書き、都市側は references で束ねる軽量レイヤを書く。"""
+    OUTDIR.mkdir(parents=True, exist_ok=True); BLDDIR.mkdir(parents=True, exist_ok=True)
+    path = path or OUTDIR / "buildings.usda"
+    st = Usd.Stage.CreateNew(str(path))
+    UsdGeom.SetStageUpAxis(st, UsdGeom.Tokens.z); UsdGeom.SetStageMetersPerUnit(st, 1.0)
+    root = UsdGeom.Xform.Define(st, "/City"); st.SetDefaultPrim(root.GetPrim())
+    UsdGeom.Xform.Define(st, "/City/Buildings")
+    for b in builts:
+        f = write_building_asset(b, BLDDIR / f"b{b.id}.usda")
+        st.DefinePrim(f"/City/Buildings/b{b.id}", "Xform").GetReferences().AddReference(f"../../assets/buildings/{f.name}")
+    st.GetRootLayer().Save()
+    return path
+
+
 def write_buildings(builts, path=None):
     OUTDIR.mkdir(parents=True, exist_ok=True)
     path = path or OUTDIR / "buildings.usda"

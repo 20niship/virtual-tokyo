@@ -7,12 +7,12 @@ MATERIALS = {
     "paint_dark": M("#5b5d60", 0.7, dirt=1),
     "paint_white": M("#e4e2dc", 0.7, dirt=1),
     "spray_main": M("#cfc8b8", 0.92, vary=["#e0dccf", "#cbbfa6", "#bcb9b0", "#c8a98d", "#aab4b6"], bump=1.2, dirt=1),
-    "alc": M("#dcdad4", 0.8, bump=0.3, dirt=1),
-    "tile_main": M("#8d6a52", 0.32, vary=["#8d6a52", "#a0907c", "#b8b2a5", "#6e6a66", "#c4b79c", "#7a5a48"], bump=0.1, dirt=1),
+    "alc": M("#dcdad4", 0.8, bump=0.3, dirt=1, joint=dict(w=0.6, h=2.0, offset=0.0, mortar=0.004, mortar_col="#aaa8a2", var=0.04, depth=0.003)),
+    "tile_main": M("#8d6a52", 0.32, vary=["#8d6a52", "#a0907c", "#b8b2a5", "#6e6a66", "#c4b79c", "#7a5a48"], bump=0.1, dirt=1, joint=dict(w=0.227, h=0.06, mortar=0.005, mortar_col="#85817a", var=0.12)),
     "grout": M("#7d7a74", 0.95),
     "mortar": M("#a8a39a", 0.95),
-    "brick_main": M("#9a4b38", 0.82, vary=["#a24d38", "#8a4030", "#6b3a30", "#b5654a", "#7d7468"], bump=0.5, dirt=1),
-    "stone_main": M("#8a8985", 0.35, vary=["#8a8985", "#a8a49c", "#5e5e60", "#b9a58c", "#d8d6d0"], bump=0.15, dirt=1),
+    "brick_main": M("#9a4b38", 0.82, vary=["#a24d38", "#8a4030", "#6b3a30", "#b5654a", "#7d7468"], bump=0.5, dirt=1, joint=dict(w=0.21, h=0.065, mortar=0.010, mortar_col="#b9b3a6", var=0.2, depth=0.006)),
+    "stone_main": M("#8a8985", 0.35, vary=["#8a8985", "#a8a49c", "#5e5e60", "#b9a58c", "#d8d6d0"], bump=0.15, dirt=1, joint=dict(w=0.6, h=0.3, mortar=0.012, mortar_col="#6d6b66", var=0.1, depth=0.005)),
     "quartz": M("#cfcac2", 0.2, bump=0.05),
     "marble": M("#e8e6e0", 0.12),
     "glass_main": M("#1a2a30", 0.03, 0.0, glass=1, vary=["#1d3338", "#26373f", "#2d3033", "#1a2a40", "#2a4038"]),
@@ -37,7 +37,7 @@ MATERIALS = {
     "sign_green": M("#1ca860", 0.5, emit=("#2fe080", 3.0)),
     "led_white": M("#ffffff", 0.5, emit=("#fff2d8", 6.0)),
     "fabric": M("#b04a3a", 0.95, vary=["#b04a3a", "#2a4a7a", "#3a6a4a", "#d8d2c4", "#222222"]),
-    "water": M("#1c3a48", 0.04, 0.0),
+    "water": M("#1c3a48", 0.04, 0.0, water=1),
 }
 
 # ---- テクスチャ付き(assets/textures)。size=1タイルのメートル寸法(None=UV 0..1)、alpha=画像のアルファを使う、wear=かすれマスクを乗せる ----
@@ -174,3 +174,4 @@ MATERIALS.update({
     "ctn_green": M("#3a6a48", 0.55, 0.4, dirt=1, rust=1), "ctn_orange": M("#c8661c", 0.55, 0.4, dirt=1, rust=1),
     "fence_sheet": M("#d9dcd8", 0.6, 0.2, dirt=1), "cone_orange": M("#ff5a00", 0.6), "boat_hull": M("#e6e8e8", 0.3, 0.2, dirt=1),
 })
+from . import materials_b  # noqa: E402,F401  (リアリズム強化B: 追記マテリアル)

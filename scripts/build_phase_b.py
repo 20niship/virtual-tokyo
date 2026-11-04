@@ -39,7 +39,7 @@ wires = furniture.build_furniture.wires
 print("OSM furniture:", furniture.build_furniture.stats)
 paths = ([usd_out.write_world_mesh("wires", wires)] if wires is not None and wires.f else []) + [usd_out.write_vegetation(veg), usd_out.write_furniture(furn), usd_out.write_world_mesh("ground", g), usd_out.write_world_mesh("roads", r), usd_out.write_world_mesh("rail", t)]
 builts = [b for f in L["buildings"] if f.geom.centroid.within(area) for b in [build_building(f)] if b]
-paths.insert(0, usd_out.write_buildings(builts))
+paths.insert(0, usd_out.write_buildings_ref(builts))
 usd_out.write_city(paths)
 if "--no-render" in sys.argv:
     sys.exit()
