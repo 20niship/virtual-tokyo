@@ -133,3 +133,33 @@ if __name__ == "__main__":
     print(rc.most_common(10))
     print([x for x in names.most_common(15)])
     print(Counter(f.tags["_hsrc"] for f in L["buildings"]))
+
+
+def load_extra(data=None):
+    """道路ファニチャ用OSM(fetch_extra): 点(POI)・線(ガードレール/フェンス/電線)をローカルm座標で返す"""
+    from .osm_fetch import fetch_extra
+    data = data or fetch_extra()
+    X = {"pois": [], "barriers": [], "powerlines": [], "adlines": [], "hedges": [], "tree_rows": [], "vegareas": []}
+    for el in data["elements"]:
+        t = el.get("tags", {})
+        if el["type"] == "node":
+            X["pois"].append(Feature(el["id"], Point(to_local(el["lon"], el["lat"])), t))
+        elif el["type"] == "way" and el.get("geometry"):
+            c = _coords(el["geometry"])
+            g = LineString(c)
+            if g.length < 0.5:
+                continue
+            f = Feature(el["id"], g, t)
+            if t.get("barrier") == "hedge":
+                X["hedges"].append(f)
+            if t.get("natural") == "tree_row":
+                X["tree_rows"].append(f)
+            if (t.get("leisure") == "garden" or t.get("landuse") in ("flowerbed", "forest") or t.get("natural") in ("wood", "scrub", "shrub")) and len(c) >= 4 and c[0] == c[-1]:
+                X["vegareas"].append(Feature(el["id"], Polygon(c), t))
+            if "barrier" in t:
+                X["barriers"].append(f)
+            elif "power" in t:
+                X["powerlines"].append(f)
+            elif "advertising" in t:
+                X["adlines"].append(f)
+    return X

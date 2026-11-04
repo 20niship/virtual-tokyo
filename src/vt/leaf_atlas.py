@@ -239,7 +239,7 @@ class Cards:
         fan = fan.filter(ImageFilter.GaussianBlur(1.2))
         for i in range(7):
             base = self.pick(rng, "round").resize((S * 2, S * 2), Image.BICUBIC).convert("RGB")
-            tex = np.asarray(base).astype(np.float32) * 0.6 + np.array([140, 150, 40]) * 0.4
+            tex = np.asarray(base).astype(np.float32) * 0.68 + np.array([96, 148, 52]) * 0.32
             leaf = Image.fromarray(np.clip(tex, 0, 255).astype(np.uint8), "RGB")
             leaf.putalpha(fan)
             leaf = leaf.crop(leaf.getbbox())

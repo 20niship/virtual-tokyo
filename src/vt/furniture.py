@@ -211,11 +211,11 @@ def stop_and_crossing_signs(P, info):
                         P.sign(qx, qy, (tx, ty), [(rng.choice(["route_kokudo_357", "route_kokudo_15", "route_kendo_316", "route_kendo_482", "route_shuto_B"]), 2.7)], pole="pole_sign_round_30")
 
 
-def street_lights(P, edges, info):
+def street_lights(P, edges, info, skip=()):
     rng = P.rng
     zf = P.zf
     for e in edges:
-        if e.kind != "drive" or e.level != 0 or e.tags["highway"] in ("motorway", "motorway_link"):
+        if e.kind != "drive" or e.level != 0 or e.tags["highway"] in ("motorway", "motorway_link") or e.id in skip:
             continue
         hw = e.tags["highway"]
         rank = CLASS_RANK.get(hw, 0)
@@ -394,13 +394,27 @@ def expressway_signs(P, info, edges):
     return
 
 
-def build_furniture(L, world, edges, info, cfg, seed=7):
+def build_furniture(L, world, edges, info, cfg, seed=7, X=None):
+    """X(OSM extra)があれば、街灯/バス停/ベンチ/ガードレール/ボラード等はOSMの位置に沿って配置し、
+    OSM街灯が既にある道路では規則による街灯を省く。補助情報は build_furniture.stats / .wires"""
     P = Placer(world, info, cfg, seed)
+    osm_ins, wires, lamp_xy, stats = [], None, [], {}
+    if X is not None:
+        from . import furniture_osm
+        osm_ins, wires, lamp_xy, stats = furniture_osm.build_osm_furniture(L, X, world, edges, info, cfg)
+    skip = set()
+    if lamp_xy:
+        for e in edges:
+            if e.kind == "drive" and e.level == 0:
+                if sum(1 for (x, y) in lamp_xy if e.line.distance(Point(x, y)) < 14) >= 2:
+                    skip.add(e.id)
     signals(P, info, edges)
     stop_and_crossing_signs(P, info)
-    street_lights(P, edges, info)
+    street_lights(P, edges, info, skip)
     edge_signs(P, edges, info)
     quay_lights(P, world)
     highmasts(P, L, world)
     expressway_signs(P, info, edges)
-    return P.out
+    build_furniture.stats = stats
+    build_furniture.wires = wires
+    return P.out + osm_ins

@@ -124,7 +124,7 @@ class Spec:
 
 
 SPECIES = {
-    "ichou": Spec(bark="bark_furrow", crown="cone", crown_w=0.36, crown_base=0.28, n_main=16, ang=42, ang_var=14, grav=0.04, up=0.12, leaf="ginkgo", leaf_size=0.15,
+    "ichou": Spec(bark="bark_furrow", crown="cone", crown_w=0.36, crown_base=0.28, n_main=16, ang=42, ang_var=14, grav=0.04, up=0.12, leaf="ginkgo", leaf_size=0.095,
                   seasons=("summer", "autumn_y", "spring", "winter"), shell=110),
     "keyaki": Spec(bark="bark_furrow", crown="vase", crown_w=0.5, crown_base=0.32, n_main=11, ang=34, ang_var=12, grav=0.0, up=0.18, leaf="oval", leaf_size=0.15,
                    seasons=("summer", "autumn_y", "spring", "winter"), shell=140, sub=5),
@@ -195,7 +195,14 @@ def build_tree(name, H=9.0, seed=0, season="summer"):
     h0 = sp.crown_base * H
 
     def r_allowed(z):
-        return crown_r * profile(sp.crown, (z - h0) / max(H - h0, 0.1))
+        return crown_r * max(profile(sp.crown, (z - h0) / max(H - h0, 0.1)), 0.14 if z < H * 0.985 else 0.0)
+
+    def trim(nodes, rad):
+        """樹冠の包絡面を出た所で枝を打ち切る(樹冠の外へ棒が飛び出さない)"""
+        for k, p in enumerate(nodes):
+            if k >= 2 and (p[2] > H * 1.04 or math.hypot(p[0], p[1]) > r_allowed(p[2]) * 1.15 + 0.3):
+                return nodes[:k], rad[:k]
+        return nodes, rad
 
     winter = season == "winter"
     # 主枝: 幹の上部に黄金角で配置
@@ -213,10 +220,10 @@ def build_tree(name, H=9.0, seed=0, season="summer"):
         d0 = np.array([math.sin(ang) * math.cos(az), math.sin(ang) * math.sin(az), math.cos(ang)])
         L = max(1.0, r_allowed(z) * 1.2 / max(math.sin(ang), 0.45)) * rng.uniform(0.85, 1.1)
         rb = max(0.015, r0 * 0.5 * (1 - 0.55 * t))
-        nodes, rad = grow_branch(rng, base, d0, L, rb, sp, 1, step=max(0.45, H / 20))
+        nodes, rad = trim(*grow_branch(rng, base, d0, L, rb, sp, 1, step=max(0.45, H / 20)))
         branches.append((nodes, rad, 1, L))
         # 側枝
-        nsub = sp.sub + int(rng.integers(0, 2))
+        nsub = (sp.sub + int(rng.integers(0, 2))) if len(nodes) >= 3 else 0
         for s in range(nsub):
             ti = rng.uniform(0.28, 0.92)
             idx = max(1, min(len(nodes) - 2, int(ti * (len(nodes) - 1))))
@@ -227,12 +234,12 @@ def build_tree(name, H=9.0, seed=0, season="summer"):
             sd = rot_about(pdir, rot_about(ax, pdir, az2), sa)
             Ls = L * (1 - ti) * sp.decay * rng.uniform(0.8, 1.2) + 0.5
             rs = max(0.008, rad[idx] * 0.55)
-            sn, sr = grow_branch(rng, nodes[idx], sd, Ls, rs, sp, 2, step=0.45)
+            sn, sr = trim(*grow_branch(rng, nodes[idx], sd, Ls, rs, sp, 2, step=0.45))
             branches.append((sn, sr, 2, Ls))
             for tw in range(sp.twigs):
                 tj = int(rng.integers(1, max(2, len(sn) - 1)))
                 tdir = rot_about(norm(sn[min(tj + 1, len(sn) - 1)] - sn[tj - 1]), rot_about(perp(sd), sd, rng.uniform(0, 6.28)), math.radians(rng.uniform(30, 65)))
-                tn, tr2 = grow_branch(rng, sn[tj], tdir, rng.uniform(0.4, 0.9) * max(0.6, H / 9), 0.006, sp, 3, step=0.35)
+                tn, tr2 = trim(*grow_branch(rng, sn[tj], tdir, rng.uniform(0.4, 0.9) * max(0.6, H / 9), 0.006, sp, 3, step=0.35))
                 branches.append((tn, tr2, 3, 0.6))
                 tips.append((tn[-1], norm(tn[-1] - tn[-2]), 3))
             tips.append((sn[-1], norm(sn[-1] - sn[-2]), 2))
@@ -252,11 +259,13 @@ def build_tree(name, H=9.0, seed=0, season="summer"):
         tw_pool = cl_pool
     ls = sp.leaf_size * H
     for pos, dr, lvl in tips:
+        if pos[2] > H * 1.06 or math.hypot(pos[0], pos[1]) > r_allowed(pos[2]) * 1.35 + 0.4:
+            continue                                            # 樹冠の外へはみ出した枝先は葉を付けない
         nm = tw_pool[int(rng.integers(len(tw_pool)))]
         up = dr
         right = norm(np.cross(up, rot_about(perp(up), up, rng.uniform(0, 6.28))))
         asp = card_aspect(nm)
-        h = ls * rng.uniform(0.9, 1.3)
+        h = ls * rng.uniform(0.8, 1.1)
         if "twig" in nm or "ginkgo" in nm:
             card(m, nm, pos + up * h * 0.45, right, up, h * asp, h, flip=rng.random() < 0.5)
         else:
@@ -264,7 +273,7 @@ def build_tree(name, H=9.0, seed=0, season="summer"):
             card(m, nm, pos, norm(np.cross(up, right)), up, h * 1.25, h * 1.25, flip=rng.random() < 0.5)
     # 樹冠外殻: 包絡面に外向きの葉塊カード(密度と輪郭を作る)
     for i in range(sp.shell):
-        t = rng.uniform(0.02, 1.0)
+        t = rng.uniform(0.02, 1.0) ** 0.8
         z = h0 + (H * 1.0 - h0) * t
         ra = r_allowed(z)
         if ra < 0.2:
