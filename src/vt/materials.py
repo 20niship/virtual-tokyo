@@ -174,3 +174,4 @@ MATERIALS.update({
     "ctn_green": M("#3a6a48", 0.55, 0.4, dirt=1, rust=1), "ctn_orange": M("#c8661c", 0.55, 0.4, dirt=1, rust=1),
     "fence_sheet": M("#d9dcd8", 0.6, 0.2, dirt=1), "cone_orange": M("#ff5a00", 0.6), "boat_hull": M("#e6e8e8", 0.3, 0.2, dirt=1),
 })
+from . import materials_b  # noqa: E402,F401  (リアリズム強化B: 追記マテリアル)

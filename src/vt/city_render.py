@@ -148,7 +148,7 @@ def pick_aerial_views(w):
     return vs
 
 
-def render_view(w, tiles, v, radius, samples=24, res=(1280, 720), extra=None):
+def render_view(w, tiles, v, radius, samples=24, res=(1280, 720), extra=None, dmin=None):
     """tiles=dict(kind→dict(tile→メッシュ/インスタンス)); カメラ周辺radius[m]のタイル/インスタンスのみ"""
     cx, cy = v.cam[0], v.cam[1]
     render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65))
@@ -162,7 +162,7 @@ def render_view(w, tiles, v, radius, samples=24, res=(1280, 720), extra=None):
             if w["tiler"].box(i, j).distance(Point(cx, cy)) < radius:
                 render.add_mesh_object(f"{name}{i}_{j}", m)
     render.add_plane(80000, 0.0, "water", loc=w["center"])          # 水平線までつながる広い水面
-    dmin = 36.0 if v.kind != "aerial" else 0.0           # カメラに重なる人/車を除く(視界が潰れるため)
+    dmin = (36.0 if v.kind != "aerial" else 0.0) if dmin is None else dmin           # カメラに重なる人/車を除く(視界が潰れるため)
     near = lambda i: dmin < (i.x - cx) ** 2 + (i.y - cy) ** 2 < radius * radius
     sel = []
     for key in ("furn", "veg", "props"):

@@ -26,6 +26,7 @@ ap.add_argument("--no-usd", action="store_true")
 ap.add_argument("--render", action="store_true")
 ap.add_argument("--per", type=int, default=2)
 ap.add_argument("--no-props", action="store_true")
+ap.add_argument("--no-life", action="store_true", help="リアリズム強化B(路面オーバーレイ・生活感)を無効化")
 ap.add_argument("--samples", type=int, default=24)
 ap.add_argument("--radius", type=float, default=260)
 ap.add_argument("--only", default="")
@@ -48,12 +49,13 @@ elif a.center:
     center, tag = tuple(float(x) for x in a.center.split(",")), "c" + a.center.replace(",", "_")
 if tag:
     from pathlib import Path
-    city_render.OUT = Path(__file__).resolve().parents[1] / f"out/render/spots/{tag}/round{a.round}"
+    import os
+    city_render.OUT = Path(__file__).resolve().parents[1] / f"out/render/{os.environ.get('RENDER_ROOT', 'spots')}/{tag}/round{a.round}"
 t0 = time.time()
 w = city.build_world(a.half, a.tile, center_ll=center, mode=a.mode)
 if not a.no_props:
     from vt import city_props
-    w["props"] = city_props.build_props(w)
+    w["props"] = city_props.build_props(w, life=not a.no_life)
     print("props:", len(w["props"]), f"({time.time() - t0:.0f}s)")
 
 tiles = city_render.make_tiles(w)
@@ -81,7 +83,7 @@ if not a.no_usd:
     print("USD tiles:", len(tiler.all()), "layers:", len(layers), f"({time.time() - t0:.0f}s)")
 
 if a.render:
-    gv = city_render.pick_ground_views(w, per=a.per)
+    gv = city_render.pick_ground_views(w, per=a.per, margin=30 if tag else 150)
     av = city_render.pick_aerial_views(w)
     if tag:     # 小領域: 地点の主題に合う地面視点3〜4枚+空中2枚
         pri = PRIORITY.get(a.spot, ["intersection", "roadway", "sidewalk", "alley", "park", "plaza"])

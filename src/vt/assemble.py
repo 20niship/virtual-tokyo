@@ -489,6 +489,9 @@ def build_building(feat, seed=0, style=None):
     top, mn = t["_top"], t["_min"]
     H = max(3.0, top - mn)
     n = max(1, round(H / 3.6))
+    nl = int(t.get("_n") or 0)                      # OSMの階数があり階高が妥当(2.6〜5.5m)なら階数どおりに分割する
+    if nl and 2.6 <= H / nl <= 5.5:
+        n = min(nl, 80)
     r = poly.minimum_rotated_rectangle
     rect = r.geom_type == "Polygon" and poly.area / r.area > 0.85
     rc = list(r.exterior.coords)[:4] if r.geom_type == "Polygon" else []

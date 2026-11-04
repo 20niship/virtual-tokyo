@@ -32,7 +32,7 @@ def _smooth(secs, sub=3):
     return out
 
 
-def vehicle(m, L, W, secs, paint, wheel_r=0.32, wb=None, track=None, hood_x=None, kind="car"):
+def vehicle(m, L, W, secs, paint, wheel_r=0.32, wb=None, track=None, hood_x=None, kind="car", plate="white", idx=0, roof_rails=False, antenna=False, pillars=True):
     """secs: 後→前の断面 [(x, rw, zb, zbelt, zroof, cabin)] を滑らかに補間して車体を作る(cabin=Trueでガラス面)。"""
     src = secs
     secs = _smooth(secs)
@@ -56,36 +56,106 @@ def vehicle(m, L, W, secs, paint, wheel_r=0.32, wb=None, track=None, hood_x=None
         for k in range(n):
             k2 = (k + 1) % n
             m.oriented([(x, cy, cz), (x, r[k][0], r[k][1]), (x, r[k2][0], r[k2][1])], (sgn, 0, 0), paint)
-    # 車輪
+    # 車輪(タイヤ+トレッド溝+リム+スポーク+ブレーキディスク)
     wb = wb or L * 0.58
     track = track or W - 0.2
     for sx in (-1, 1):
         for sy in (-1, 1):
-            cx, cy = sx * wb / 2, sy * track / 2
-            m.cyl(cx, cy - (0.12 if sy < 0 else 0.0), wheel_r, wheel_r, 0.24, "y", "car_tire", 14)
-            m.cyl(cx, cy + (-0.125 if sy < 0 else 0.01), wheel_r, wheel_r * 0.6, 0.0, "y", "car_wheel", 10) if False else \
-                m.cyl(cx, cy + (-0.125 if sy < 0 else 0.125), wheel_r, wheel_r * 0.62, 0.012, "y", "car_wheel", 12)
-    for sx in (-1, 1):                                  # ホイールアーチ(暗い円盤)
+            wheel(m, sx * wb / 2, sy * track / 2, sy, wheel_r)
+    for sx in (-1, 1):                                  # ホイールアーチ(暗い円盤): 地面より下に出さない
         for sy in (-1, 1):
-            m.cyl(sx * wb / 2, sy * W / 2 - 0.012, wheel_r, wheel_r + 0.09, 0.024, "y", "car_under", 16)
+            m.cyl(sx * wb / 2, sy * W / 2 - 0.012, wheel_r + 0.04, wheel_r + 0.04, 0.024, "y", "car_under", 18)
     zbelt = secs[len(secs) // 2][3]
-    for sy in (-1, 1):                                  # ドアの合わせ目とドアハンドル
+    cab = [s for s in secs if s[5]]
+    cx0, cx1 = (min(s[0] for s in cab), max(s[0] for s in cab)) if cab else (-L * 0.2, L * 0.2)
+    for sy in (-1, 1):                                  # ドアの合わせ目・ドアハンドル・サイドシル
         for fx in (-0.1, 0.12):
             m.box(fx * L, sy * W / 2 - 0.004, 0.36, fx * L + 0.012, sy * W / 2 + 0.004, zbelt, "car_under")
         m.box(0.02 * L, sy * W / 2 - 0.01, zbelt - 0.12, 0.02 * L + 0.14, sy * W / 2 + 0.012, zbelt - 0.09, "car_wheel")
+        m.box(-wb / 2 + wheel_r, sy * W / 2 - 0.02, 0.2, wb / 2 - wheel_r, sy * W / 2 + 0.012, 0.32, "car_trim")
+    if pillars and cab:                                 # Bピラー(窓の斜面に沿った黒い柱)
+        for sy in (-1, 1):
+            xp = (cx0 + cx1) / 2 + 0.05 * L
+            za, zg = zbelt, zbelt + (secs[len(secs) // 2][4] - zbelt) * 0.8
+            rw = secs[len(secs) // 2][1]
+            y0, y1 = sy * (W / 2 + 0.004), sy * (rw / 2 + 0.004)
+            prof = [(y0 - 0.03, za), (y0 + 0.03, za), (y1 + 0.03, zg), (y1 - 0.03, zg)] if sy > 0 else [(y0 + 0.03, za), (y0 - 0.03, za), (y1 - 0.03, zg), (y1 + 0.03, zg)]
+            m.prism(prof if sy > 0 else prof[::-1], "x", xp - 0.04, xp + 0.04, "car_trim")
     xf, xr = rings[-1][0], rings[0][0]
     zb = secs[-1][2]
     zl = secs[-1][3] - 0.18
-    for sy in (-1, 1):                                  # ヘッドライト/テールランプ
+    for sy in (-1, 1):                                  # ヘッドライト(+DRL帯+ウインカー)/テールランプ
         m.box(xf - 0.02, sy * W * 0.34 - 0.18, zl - 0.06, xf + 0.012, sy * W * 0.34 + 0.18, zl + 0.08, "car_headlight")
+        m.box(xf - 0.02, sy * W * 0.34 - 0.16, zl - 0.09, xf + 0.014, sy * W * 0.34 + 0.16, zl - 0.07, "led_white")
+        m.box(xf - 0.02, sy * W * 0.34 + (0.18 if sy < 0 else -0.24), zl - 0.04, xf + 0.012, sy * W * 0.34 + (0.24 if sy < 0 else -0.18), zl + 0.02, "reflector_orange")
         m.box(xr - 0.012, sy * W * 0.36 - 0.17, secs[0][3] - 0.2, xr + 0.02, sy * W * 0.36 + 0.17, secs[0][3] - 0.08, "car_taillight")
     for xx, d in ((xf, 1), (xr, -1)):                                                            # 前後バンパー+グリル
         m.box(xx - 0.03 * (1 if d > 0 else -1) - 0.03, -W * 0.46, zb + 0.02, xx + 0.03 * d + 0.03, W * 0.46, zb + 0.16, "car_under")
     m.box(xf - 0.02, -W * 0.3, zb + 0.18, xf + 0.02, W * 0.3, zb + 0.32, "car_under")
-    m.box(xf - 0.01, -0.26, zb + 0.18, xf + 0.012, 0.26, zb + 0.3, "car_plate")                # ナンバー
-    m.box(xr - 0.012, -0.26, zb + 0.28, xr + 0.01, 0.26, zb + 0.4, "car_plate")
+    for k in range(5):                                                                           # グリルの横桟
+        m.box(xf + 0.015, -W * 0.28, zb + 0.2 + k * 0.022, xf + 0.024, W * 0.28, zb + 0.21 + k * 0.022, "car_chrome")
+    _plate(m, xf + 0.012, zb + 0.18, 0.3, 1, plate, idx)                                         # ナンバー(前)
+    _plate(m, xr - 0.012, zb + 0.28, 0.3, -1, plate, idx + 1)                                    # ナンバー(後)
+    m.box(xr - 0.03, W * 0.3 - 0.04, 0.2, xr + 0.02, W * 0.3 + 0.04, 0.26, "car_chrome")         # マフラー
     for sy in (-1, 1):                                                                           # ドアミラー
         m.box(xf - L * 0.3, sy * (W / 2 + 0.1) - 0.02, secs[1][3] + 0.02, xf - L * 0.3 + 0.12, sy * (W / 2 + 0.1) + 0.02, secs[1][3] + 0.14, paint)
+        m.box(xf - L * 0.3 + 0.02, sy * (W / 2 + 0.02) - 0.01, secs[1][3] + 0.02, xf - L * 0.3 + 0.05, sy * (W / 2 + 0.1) + 0.01, secs[1][3] + 0.06, "car_trim")
+    xw = cx1 - 0.15                                                                              # ワイパー(フロントガラス下端)
+    for sy in (-0.5, 0.15):
+        m.box(xw, sy * W * 0.7 - 0.02, zbelt + 0.0, xw + 0.03, sy * W * 0.7 + 0.5, zbelt + 0.025, "car_wiper")
+    if roof_rails and cab:
+        zr = max(s[4] for s in cab)
+        for sy in (-1, 1):
+            m.box(cx0 + 0.2, sy * 0.58 - 0.02, zr, cx1 - 0.1, sy * 0.58 + 0.02, zr + 0.05, "car_trim")
+    if antenna and cab:
+        m.cyl(cx0 + 0.25, -0.5, max(s[4] for s in cab) - 0.02, 0.006, 0.45, "z", "car_trim", 5)
+
+
+def wheel(m, cx, cy, side, r, wid=0.22):
+    """車輪1個。cy=タイヤ中心のy, side=+1/-1(外側の向き)。z中心=r"""
+    m.cyl(cx, cy - wid / 2, r, r, wid, "y", "car_tire", 18)
+    for k in (-1, 0, 1):                                  # トレッド溝(周方向)
+        m.cyl(cx, cy + k * wid * 0.27 - 0.01, r, r + 0.004, 0.02, "y", "car_tread", 18)
+    yo = cy + side * wid / 2
+    ys = yo + side * 0.008
+    m.cyl(cx, min(yo, ys), r, r * 0.66, 0.008, "y", "car_wheel", 18)
+    for i in range(5):                                    # スポーク
+        a = i * 2 * math.pi / 5 + 0.3
+        ca, sa = math.cos(a), math.sin(a)
+        pts = []
+        for rad, hw in ((r * 0.12, 0.022), (r * 0.62, 0.034)):
+            for sg in (-1, 1):
+                pts.append((cx + rad * ca - sg * hw * sa, ys + side * 0.002, r + rad * sa + sg * hw * ca))
+        m.oriented([pts[0], pts[2], pts[3], pts[1]], (0, side, 0), "car_trim")
+    m.cyl(cx, min(yo, ys + side * 0.012), r, r * 0.13, 0.012, "y", "car_chrome", 10)
+    m.cyl(cx, cy - side * wid * 0.45 - (0 if side > 0 else 0.0), r, r * 0.5, 0.01, "y", "car_brake_disc", 14)
+
+
+_PL = None
+
+
+def _plates():
+    global _PL
+    if _PL is None:
+        import json
+        from pathlib import Path
+        p = Path(__file__).resolve().parents[3] / "assets/textures/plate_atlas.json"
+        _PL = json.load(open(p)) if p.exists() else {}
+    return _PL
+
+
+def _plate(m, x, z0, w, d, kind, idx):
+    """ナンバープレート(w×w/2m)。d=+1前面(+x向き)/-1背面。架空番号のアトラス(plate_atlas)の kind_idx セルを貼る"""
+    PL = _plates()
+    uvs = PL.get("uv", {})
+    key = f"{kind}_{idx % PL.get('cols', 6)}" if PL else None
+    h = w / 2
+    pts = [(x, -w / 2 * d, z0), (x, w / 2 * d, z0), (x, w / 2 * d, z0 + h), (x, -w / 2 * d, z0 + h)]
+    if key in uvs:
+        u0, v0, u1, v1 = uvs[key]
+        m.oriented(pts, (d, 0, 0), "car_plate_atlas", [(u0, v0), (u1, v0), (u1, v1), (u0, v1)])
+    else:
+        m.oriented(pts, (d, 0, 0), "car_plate")
 
 
 # 断面表: (x, ルーフ幅, 底, ベルト, ルーフ, キャビン?)  全長L=2*xmax
@@ -344,3 +414,7 @@ reg("boat_ferry", lambda m, W, H, r: boat(m, 28.0, 7.0, "ferry"), W=28.0, H=4.5,
 reg("boat_small", lambda m, W, H, r: boat(m, 6.5, 2.2, "small"), W=6.5, H=2.0, cat="船")
 reg("person_child_0", lambda m, W, H, r: person(m, "ped_cloth_red", "ped_cloth_navy", False, 1.1, True), W=0.4, H=1.1, cat="人")
 reg("person_child_1", lambda m, W, H, r: person(m, "ped_cloth_green", "ped_cloth_gray", True, 1.1, True), W=0.4, H=1.1, cat="人")
+
+
+from . import lib_city2  # noqa: E402,F401  (リアリズム強化B: 追加車種・人)
+from . import lib_life  # noqa: E402,F401  (リアリズム強化B: 街の生活感)

@@ -68,13 +68,17 @@ def _num(s):
     return float(m.group(1)) if m else None
 
 
+STOREY = {"apartments": 3.0, "residential": 3.0, "house": 3.0, "detached": 3.0, "dormitory": 3.0, "terrace": 3.0, "semidetached_house": 3.0,   # 階高[m](用途別。住宅は約3.0、事務所/商業は約3.9、工場は約4.5)
+          "commercial": 3.9, "office": 3.9, "retail": 3.9, "hotel": 3.5, "supermarket": 4.2, "industrial": 4.5, "warehouse": 4.5, "factory": 4.5}
+
+
 def building_height(tags, rng):
-    """height -> levels*3.5 -> 乱数推定(シード固定)。(top, min_height, source)を返す"""
+    """height -> levels*階高(用途別) -> 乱数推定(シード固定)。(top, min_height, source)を返す"""
     mh = _num(tags.get("min_height")) or 0.0
     if (h := _num(tags.get("height"))) is not None:
         return h, mh, "height"
     if (n := _num(tags.get("building:levels"))) is not None:
-        return n * LEVEL_H + mh, mh, "levels"
+        return n * STOREY.get(tags.get("building", ""), LEVEL_H) + mh, mh, "levels"
     return rng.choice([6, 9, 12, 15, 20, 30]), mh, "guess"
 
 
@@ -108,7 +112,7 @@ def load(data=None):
                 L["building_parts"].append(f)
             elif "building" in t:
                 top, mh, src = building_height(t, rng)
-                f.tags = {**t, "_top": top, "_min": mh, "_hsrc": src}
+                f.tags = {**t, "_top": top, "_min": mh, "_hsrc": src, "_n": int(_num(t.get("building:levels")) or 0)}
                 L["buildings"].append(f)
             elif t.get("natural") in ("water", "bay") or "water" in t:
                 L["water"].append(f)
