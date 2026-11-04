@@ -7,7 +7,7 @@ from pathlib import Path
 
 from shapely.geometry import Point
 
-from vt import bridges, furniture, ground, rails_c, render, roads, usd_out
+from vt import bridges, furniture, ground, rails_c, render, roads, usd_out, vegetation
 from vt.assemble import build_building
 from vt.geo import to_local
 from vt.layers import load, load_extra
@@ -33,9 +33,11 @@ X = load_extra()
 furn = furniture.build_furniture(L, W, edges, info, roads.CFG, X=X) + list(roads.elevated_roads.insts) + rail_insts
 usd_out.write_all_modules(log=lambda s: None)
 print("faces ground/roads/rail:", len(g.f), len(r.f), len(t.f), "furniture:", len(furn))
+veg = vegetation.build_vegetation(L, X, W, edges, info, roads.CFG, seed=3, avoid=furn)
+print("vegetation:", len(veg))
 wires = furniture.build_furniture.wires
 print("OSM furniture:", furniture.build_furniture.stats)
-paths = ([usd_out.write_world_mesh("wires", wires)] if wires is not None and wires.f else []) + [usd_out.write_furniture(furn), usd_out.write_world_mesh("ground", g), usd_out.write_world_mesh("roads", r), usd_out.write_world_mesh("rail", t)]
+paths = ([usd_out.write_world_mesh("wires", wires)] if wires is not None and wires.f else []) + [usd_out.write_vegetation(veg), usd_out.write_furniture(furn), usd_out.write_world_mesh("ground", g), usd_out.write_world_mesh("roads", r), usd_out.write_world_mesh("rail", t)]
 builts = [b for f in L["buildings"] if f.geom.centroid.within(area) for b in [build_building(f)] if b]
 paths.insert(0, usd_out.write_buildings(builts))
 usd_out.write_city(paths)
@@ -63,7 +65,7 @@ def scene(samples=64, sun=(0.5, -0.45, 0.65), with_buildings=True, res=(1920, 10
     render.init_scene(res, samples, sun_dir=sun)
     render.add_mesh_object("ground", g); render.add_mesh_object("roads", r); render.add_mesh_object("rail", t)
     render.add_mesh_object("water", ground.water_mesh(W))
-    render.add_instances([i for i in furn if math.dist((i.x, i.y), IX) < 330])
+    render.add_instances([i for i in furn + veg if math.dist((i.x, i.y), IX) < 330])
     if with_buildings:
         render.add_buildings([b for b in builts if math.dist((b.insts[0].x, b.insts[0].y), IX) < 330])
 

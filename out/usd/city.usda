@@ -3,6 +3,7 @@
     metersPerUnit = 1
     subLayers = [
         @./buildings.usda@,
+        @./vegetation.usda@,
         @./furniture.usda@,
         @./ground.usdc@,
         @./roads.usdc@,
