@@ -93,7 +93,17 @@ def _mesh_piece(rf, name, Vrest, tris, bone, color, follow="rot"):
     else:
         V = Vrest + (rf["bone_poses"][bi][:3, 3] - rf["rest_bone_poses"][bi][:3, 3])
     cl = dict(faces=[[(int(i), -1) for i in t] for t in tris], vt=np.zeros((1, 2)), license="procedural", author="procedural", name=name, path=f"procedural/{name}", tex=None)
-    return dict(slot=name, name=name, Vrest=Vrest, V=V, cw=cw, cl=cl, mat=color, uv=False)
+    return dict(slot=name, name=name, Vrest=Vrest, V=V, cw=cw, cl=cl, mat=color, uv=False, follow=follow, bone=bone)
+
+
+def repose(pc, rf):
+    """フィット済みの1枚を別のポーズへ(フィットし直さない)。動画のフレームごとの更新用"""
+    if pc.get("follow") == "pos":
+        bi = H.model("anny").bone_labels.index(pc["bone"])
+        V = pc["Vrest"] + (rf["bone_poses"][bi][:3, 3] - rf["rest_bone_poses"][bi][:3, 3])
+    else:
+        V = H.skin(pc["Vrest"], rf["rest_bone_poses"], rf["bone_poses"], pc["cw"])
+    return dict(pc, V=V)
 
 
 def _box(c, s):

@@ -404,7 +404,7 @@ def outfit(spec, rng):
     return o
 
 
-def build(spec, outfit_d=None, topology="anny", posename="stand", phase=0.0):
+def build(spec, outfit_d=None, topology="anny", posename="stand", phase=0.0, cache=None):
     """人物1体を組む。戻り dict(rest, v, faces, bones_rest, bones_pose, W, parts, full, cloth=[dict(slot,name,V,Vrest,cw,cl,mat,uv)])"""
     from . import humans_wear as WR
     rng = random.Random(spec["seed"] * 31 + 5)
@@ -424,6 +424,9 @@ def build(spec, outfit_d=None, topology="anny", posename="stand", phase=0.0):
         _PARTS = face_parts(mf)
     out["parts"] = _PARTS if topology == "anny" else None
     out["full"] = dict(v=rf["vertices"], rest=rf["rest_vertices"], faces=mf.faces.numpy(), parts=_PARTS, nrm=_vnormals(rf["vertices"], mf.faces.numpy()))
+    if cache is not None and "pieces" in cache:
+        out["cloth"] = [WR.repose(pc, rf) for pc in cache["pieces"]]
+        return out
     out["cloth"] = WR.build_pieces(rf, of["pieces"], r, topology)
     for pc in out["cloth"]:
         pc["mat"] = f"anny_cl_{pc['mat']}"
@@ -433,6 +436,8 @@ def build(spec, outfit_d=None, topology="anny", posename="stand", phase=0.0):
         Vr = fit_cloth(cl, rf["rest_vertices"], "anny", margin=0.004)
         cw = bind(cl, "anny")["cw"]
         out["cloth"].append(dict(slot="hair", name=nm, Vrest=Vr, V=skin(Vr, rf["rest_bone_poses"], rf["bone_poses"], cw), cw=cw, cl=cl, mat=f"anny_hair_{nm}_{of['hair_color']}", uv=True))
+    if cache is not None:
+        cache["pieces"] = out["cloth"]
     return out
 
 

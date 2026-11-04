@@ -131,13 +131,13 @@ def _face_decals(m, H, b, g, of):
         _ellipse(m, H, g, p + n * 0.0012, t, u, 0.0190, 0.0042, "anny_lip")
 
 
-def build_mesh(m, group, k, topology=LOD, pose_override=None):
+def build_mesh(m, group, k, topology=LOD, pose_override=None, cache=None, ground=None, decimate=True):
     """humans.build の結果を Mesh(共有頂点・スムース)に詰める"""
     from .. import humans as H
     spec = spec_of(group, k)
     pn, ph = pose_override or pose_of(group, k)
-    b = H.build(spec, topology=topology, posename=pn, phase=ph)
-    g = float(b["v"][:, 2].min()) - 0.007
+    b = H.build(spec, topology=topology, posename=pn, phase=ph, cache=cache)
+    g = float(b["v"][:, 2].min()) - 0.007 if ground is None else ground
     of = b["outfit"]
     o = len(m.v)
     V = H.to_world(b["v"], ground=g)
@@ -158,7 +158,7 @@ def build_mesh(m, group, k, topology=LOD, pose_override=None):
         Vc = H.to_world(c["V"], ground=g)
         vt = c["cl"]["vt"]
         faces = c["cl"]["faces"]
-        if topology != "anny" and not c["uv"] and len(faces) > DECIM_MIN:
+        if decimate and topology != "anny" and not c["uv"] and len(faces) > DECIM_MIN:
             cell = 0.006
             while True:
                 V2, tris = H.decimate(Vc, [[vi for vi, _ in f] for f in faces], cell)
@@ -174,7 +174,7 @@ def build_mesh(m, group, k, topology=LOD, pose_override=None):
         for face in faces:
             m.f.append(tuple(vi + o for vi, _ in face)); m.m.append(c["mat"])
             m.uv.append([tuple(vt[t]) for _, t in face] if c["uv"] else None)
-    _subset(m, H, b, g, lambda p: p.startswith("foot"), lambda p: f"anny_shoe_{of['shoe_color']}", push=0.007, cell=0.016 if topology != "anny" else 0.0)
+    _subset(m, H, b, g, lambda p: p.startswith("foot"), lambda p: f"anny_shoe_{of['shoe_color']}", push=0.007, cell=0.016 if (topology != "anny" and decimate) else 0.0)
     if topology != "anny":
         _face_decals(m, H, b, g, of)
     m.smooth = True
