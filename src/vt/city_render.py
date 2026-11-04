@@ -24,11 +24,11 @@ def _look(x, y, dx, dy, z, dist=20.0, dz=0.0):
     return (x + dx / n * dist, y + dy / n * dist, z + dz)
 
 
-def pick_ground_views(w, seed=5, per=2):
+def pick_ground_views(w, seed=5, per=2, margin=150):
     """歩道/車道/交差点/公園/広場/水辺/高架下/駐車場/路地/建物裏/駅前 から自動選定"""
     rng = random.Random(seed)
     T, area, edges, info = w["T"], w["area"], w["edges"], w["info"]
-    inner = area.buffer(-min(150, (area.bounds[2] - area.bounds[0]) * 0.15))
+    inner = area.buffer(-margin)
     views = []
 
     from shapely.strtree import STRtree

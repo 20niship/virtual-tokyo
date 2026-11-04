@@ -54,7 +54,7 @@ def split_insts(insts, tiler):
     return out
 
 
-def build_world(half=900, tile=450, seed=3, log=print, center_ll=CENTER_LL, mode="hybrid", use_cache=True):
+def build_world(half=900, tile=450, seed=3, log=print, center_ll=CENTER_LL, mode="hybrid", use_cache=True, district=None):
     """領域(中心±half[m]の正方形)の全要素を生成して dict で返す"""
     t0 = time.time()
     lap = lambda s: log(f"  [{time.time() - t0:5.0f}s] {s}")
@@ -99,7 +99,12 @@ def build_world(half=900, tile=450, seed=3, log=print, center_ll=CENTER_LL, mode
     props = []
     if mode in ("infill", "hybrid"):
         from . import blocks
-        inf = blocks.infill(dict(area=area, land=land, info=info, L=L, edges=edges, T=T, center=c), mode, seed=seed + 4, log=log)
+        wd = dict(area=area, land=land, info=info, L=L, edges=edges, T=T, center=c)
+        if district:                      # 田舎/ロードサイド/工場/コンビナート等の地区タイプ(未指定=東京の既定)
+            from . import district as dist
+            inf = dist.infill(wd, district, "infill" if mode == "hybrid" else mode, seed=seed + 4, log=log)
+        else:
+            inf = blocks.infill(wd, mode, seed=seed + 4, log=log)
         feats += inf["features"]
         g.add(inf["pads"])
         props += inf["props"]

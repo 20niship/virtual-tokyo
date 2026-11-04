@@ -7,7 +7,7 @@ from collections import defaultdict
 import numpy as np
 from shapely.geometry import LineString, Point
 
-from . import roads
+from . import expwy, roads
 from .assemble import Inst
 from .modules.geom import Mesh
 from .modules.geom3 import beam, frustum, hexa, tube3
@@ -111,11 +111,15 @@ def pier(mesh, x, y, ang, z_ground, z_deck, th, hw, rng, kind=None, in_water=Fal
     top = z_deck - th - 0.28
     cols = [0.0] if kind == "T" else [-hw * 0.55, hw * 0.55]
     cw, cl_ = (2.2, 2.0) if kind == "T" else (1.9, 1.8)
+    cmat = "concrete_stained" if rng.random() < 0.65 else "concrete_formed"            # 雨だれ・カビで汚れた柱(経年)
     for cx in cols:
         col_top = top - d_cap
         # 柱: 下がやや太い先細り + 柱頭の張り出し
-        frustum(m, cx, 0, base_z, col_top, cw + 0.4, cl_ + 0.3, cw, cl_, 0.0, "concrete_formed")
-        frustum(m, cx, 0, col_top - 0.9, col_top, cw, cl_, cw + 0.5, cl_ + 0.3, 0.0, "concrete_formed")
+        frustum(m, cx, 0, base_z, col_top, cw + 0.4, cl_ + 0.3, cw, cl_, 0.0, cmat)
+        frustum(m, cx, 0, col_top - 0.9, col_top, cw, cl_, cw + 0.5, cl_ + 0.3, 0.0, cmat)
+        if not in_water:                                                                 # 柱脚の落書き防止塗装帯(2.4m)
+            tp = lambda z, k: k + 0.04 + (0.4 if k == cw else 0.3) * (1 - (z - base_z) / max(0.1, col_top - base_z))
+            frustum(m, cx, 0, z_ground + 1.2, z_ground + 3.6, tp(z_ground + 1.2, cw), tp(z_ground + 1.2, cl_), tp(z_ground + 3.6, cw), tp(z_ground + 3.6, cl_), 0.0, "ex_antigraffiti")
         # 根巻き(1.2m)と基礎(フーチング)
         m.box(cx - (cw + 0.7) / 2, -(cl_ + 0.6) / 2, z_ground - 0.5, cx + (cw + 0.7) / 2, (cl_ + 0.6) / 2, z_ground + 1.2, "concrete_formed")
         m.box(cx - (cw + 2.4) / 2, -(cl_ + 2.4) / 2, z_ground - 1.5, cx + (cw + 2.4) / 2, (cl_ + 2.4) / 2, z_ground - 0.5, "concrete_formed")
@@ -264,7 +268,9 @@ def elevated_roads(edges, world, cfg, rng, elev=None):
             if ws[i] < 0.4 and zs[i] - zg > 3.5 and (on_land or (e.level <= 3 and zs[i] < 30)):
                 tx_, ty_ = frames(pts)[i][2], frames(pts)[i][3]
                 pier(mesh, x, y, math.atan2(ty_, tx_) - math.pi / 2 + math.pi / 2 * 0, zg, zs[i], max(0.6, ths[i]), hws[i], rng, in_water=not on_land)
+                insts.extend(expwy.pier_extras(x, y, math.atan2(ty_, tx_) - math.pi / 2, zg, zs[i], max(0.6, ths[i]), hws[i], "portal" if hws[i] > 6.5 else "T", rng, on_land))
             s += spacing * rng.uniform(0.93, 1.07)
+        insts.extend(expwy.deck_details(e, pts, S, zs, hws, ths, ws, zf, land, steel))
     if RB is not None:
         m2, i2 = rainbow_structure(RB, world)
         mesh.add(m2)
