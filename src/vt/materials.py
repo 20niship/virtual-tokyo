@@ -129,6 +129,17 @@ MATERIALS.update({
     "tree_pit_iron": M("#2d2f31", 0.6, 0.8, rust=1),
 })
 
+# ---- 路面の追加要素(右折レーン/バスレーン/道路鋲/劣化デカール/排水) ----
+MATERIALS.update({
+    "paint_road_bus": dict(color="#b0452e", rough=0.65, metal=0.0, wear="paint_wear.png", wear_size=2.5),
+    "cats_eye_white": M("#e8e8e0", 0.25, 0.4, emit=("#ffffff", 0.6)),
+    "cats_eye_yellow": M("#e2b400", 0.25, 0.4, emit=("#ffcc00", 0.6)),
+    "asphalt_rut": T("asphalt_rut.png", (4.0, 0.7), 0.7, 0.0, alpha=True),
+    "gutter": T("gutter.png", (1.0, 0.3), 0.85, 0.5),
+})
+for _n in ("asphalt_crack_1", "asphalt_crack_2", "asphalt_crack_3", "asphalt_patch_1", "asphalt_patch_2", "grating", "drain_inlet"):
+    MATERIALS["decal_" + _n] = dict(color="#ffffff", rough=0.85 if "asphalt" in _n else 0.5, metal=0.0, tex=_n + ".png", size=None, alpha=True, wear=None)
+
 # ---- 道路ファニチャ2(安全施設・電柱・街具・看板) ----
 MATERIALS.update({
     "ad_atlas": dict(color="#ffffff", rough=0.35, metal=0.0, tex="ad_atlas.png", size=None, alpha=False),

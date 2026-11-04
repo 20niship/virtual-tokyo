@@ -124,7 +124,7 @@ def _split(tri, maxe, out, depth=0, zf=None, tol=0.05):
         m = ((c[0] + a[0]) / 2, (c[1] + a[1]) / 2); _split((a, b, m), maxe, out, depth + 1, zf, tol); _split((m, b, c), maxe, out, depth + 1, zf, tol)
 
 
-def triangles(geom, spacing=6.0, interior=True, zf=None):
+def triangles(geom, spacing=6.0, interior=True, zf=None, tol=0.05):
     """shapely(Multi)Polygon → 三角形[(p,p,p)]。制約付きearcutで穴なく分割し、interior=Trueなら最長辺を2*spacing以下に細分化(地形追従)"""
     from .assemble import _tess
     out = []
@@ -142,20 +142,20 @@ def triangles(geom, spacing=6.0, interior=True, zf=None):
             continue
         g = g.segmentize(spacing)
         if g.geom_type != "Polygon":
-            out += triangles(g, spacing, interior, zf)
+            out += triangles(g, spacing, interior, zf, tol)
             continue
         for tri in _tess(g):
             t = tuple((v.x, v.y) for v in tri)
             if interior:
-                _split(t, spacing * 1.6, out, 0, zf)
+                _split(t, spacing * 1.6, out, 0, zf, tol)
             else:
                 out.append(t)
     return out
 
 
-def fill(mesh, geom, zf, mat, spacing=6.0, interior=True, uv=None):
+def fill(mesh, geom, zf, mat, spacing=6.0, interior=True, uv=None, tol=0.05):
     """面geomを地形zf(x,y)に沿って塗る(上向き)。uvは(x,y)->(u,v)で省略時はメートルのボックス投影"""
-    for t in triangles(geom, spacing, interior, zf):
+    for t in triangles(geom, spacing, interior, zf, tol):
         pts = [(x, y, zf(x, y)) for x, y in t]
         a, b, c = pts
         n = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
