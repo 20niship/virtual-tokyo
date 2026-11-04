@@ -120,18 +120,19 @@ def siding(name, col, rows=8, seed=13, brick=False):
     save(name, g[..., None] * rgb(col))
 
 
-def corrugated(name, col, seed=17, pitch=0.076, size=1.2, rust=0.45):
+def corrugated(name, col_, seed=17, pitch=0.076, size=1.2, rust=0.45):
     """波板(トタン): 縦の波+錆と汚れ。"""
     x, v = _uv()
     nx = int(size / pitch)
     u = (x * nx) % 1.0
     prof = 0.5 + 0.5 * np.cos(2 * np.pi * u)
     light = 0.62 + 0.38 * prof
-    r = _sm(1 - rust, 1.0, tnoise(N, 1.7, seed) + 0.25 * tnoise(N, 0.5, seed + 1))
-    drip = _sm(0.6, 1.0, tnoise(N, 2.6, seed + 2) * (1.2 - v * 0.6))
-    img = light[..., None] * rgb(col)
-    img = img * (1 - 0.7 * r[..., None]) + 0.7 * r[..., None] * rgb("#8a4a26") * light[..., None]
-    img *= (1 - 0.3 * drip[..., None])
+    r = _sm(1 - rust * 0.6, 1.0, 0.7 * tnoise(N, 0.9, seed) + 0.3 * tnoise(N, 0.3, seed + 1))              # 小さな錆斑
+    col = tnoise(N, 1.4, seed + 2)[0:1, :]                                                                  # 縦の雨だれ筋(列ごとの濃淡)
+    drip = (_sm(0.55, 1.0, col) * (1.0 - 0.7 * v))
+    img = light[..., None] * rgb(col_)
+    img = img * (1 - 0.55 * r[..., None]) + 0.55 * r[..., None] * rgb("#8a4a26") * light[..., None]
+    img *= (1 - 0.22 * drip[..., None])
     img *= (0.94 + 0.12 * tnoise(N, 0.4, seed + 3))[..., None]
     save(name, np.clip(img, 0, 1))
 
