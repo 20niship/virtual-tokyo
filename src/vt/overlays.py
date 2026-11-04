@@ -47,21 +47,21 @@ def road_overlays(w, rng, wet=0.3, age=0.5):
             return x - ty * t, y + tx * t, math.atan2(ty, tx)
 
         for s in _walk(L, rng, 30, 70, 8):                                       # 落ち葉(縁石際)
-            if rng.random() < 0.28 * (0.5 + age):
+            if rng.random() < 0.5 * (0.5 + age):
                 sg, t = rng.choice(gutter)
                 x, y, a = at(s, t)
                 if area.contains(Point(x, y)):
                     D(x, y, rng.uniform(0, 6.28), rng.uniform(1.4, 2.6), rng.uniform(1.4, 2.6), f"decal_overlay_leaf_litter_{rng.randint(1, 2)}", 0.013)
                     n["leaf"] += 1
         for s in _walk(L, rng, 40, 120, 8):                                      # 水たまり(轍・縁石際)
-            if rng.random() < 0.35 * wet + 0.04:
+            if rng.random() < 0.5 * wet + 0.1:
                 sg, t = rng.choice(gutter)
                 x, y, a = at(s, t * rng.uniform(0.7, 1.0))
                 if area.contains(Point(x, y)):
                     D(x, y, a + rng.uniform(-0.3, 0.3), rng.uniform(1.0, 2.0), rng.uniform(2.0, 3.8), "decal_overlay_puddle", 0.015)
                     n["puddle"] += 1
         for s in _walk(L, rng, 50, 160, 10):                                     # 油染み(車線の中央寄り=停車位置)
-            if rng.random() < 0.3 * (0.5 + age):
+            if rng.random() < 0.5 * (0.5 + age):
                 x, y, a = at(s, rng.choice(lanes) + rng.uniform(-0.4, 0.4))
                 if area.contains(Point(x, y)):
                     D(x, y, rng.uniform(0, 6.28), rng.uniform(0.6, 1.3), rng.uniform(0.6, 1.3), "decal_overlay_oil", 0.011)
@@ -98,6 +98,12 @@ def road_overlays(w, rng, wet=0.3, age=0.5):
                     if area.contains(Point(x, y)):
                         D(x, y, a, cw, cl, mat, curb + 0.012)
                         n["cover"] += 1
+            for s in _walk(L, rng, 25, 70, 6):                              # 歩道の落ち葉(街路樹の下)
+                if rng.random() < 0.45 * (0.5 + age):
+                    x, y, a = at(s, sg * (p.half + sw * rng.uniform(0.2, 0.9)))
+                    if area.contains(Point(x, y)):
+                        D(x, y, rng.uniform(0, 6.28), rng.uniform(1.0, 2.2), rng.uniform(1.0, 2.2), f"decal_overlay_leaf_litter_{rng.randint(1, 2)}", curb + 0.013)
+                        n["leaf"] += 1
             for s in _walk(L, rng, 14, 40, 6):
                 if curb >= 0.07 and rng.random() < 0.4 * (0.4 + age):
                     x, y, a = at(s, sg * (p.half + 0.0))

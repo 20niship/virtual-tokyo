@@ -38,15 +38,15 @@ BODY = ["vending_body_white", "vending_body_gray", "vending_body_red", "vending_
 def vending(m, i):
     uvs = _uv("vending_atlas.json")
     b = BODY[i % len(BODY)]
-    m.box(-0.5, -0.38, 0.0, 0.5, 0.38, 1.82, b)
-    m.box(-0.52, -0.4, 1.8, 0.52, 0.4, 1.86, b)                                           # 天板の庇
-    m.box(-0.5, 0.375, 0.0, 0.5, 0.4, 0.1, "car_trim")                                    # 足元
+    m.box(-0.58, -0.38, 0.0, 0.58, 0.38, 1.9, b)
+    m.box(-0.6, -0.4, 1.88, 0.6, 0.4, 1.94, b)                                           # 天板の庇
+    m.box(-0.58, 0.375, 0.0, 0.58, 0.4, 0.1, "car_trim")                                    # 足元
     if uvs:
-        _tex_quad(m, [(0.46, 0.382, 0.14), (-0.46, 0.382, 0.14), (-0.46, 0.382, 1.78), (0.46, 0.382, 1.78)], (0, 1, 0), "vending_atlas", uvs[i % len(uvs)])
+        _tex_quad(m, [(0.54, 0.382, 0.14), (-0.54, 0.382, 0.14), (-0.54, 0.382, 1.84), (0.54, 0.382, 1.84)], (0, 1, 0), "vending_atlas", uvs[i % len(uvs)])
     else:
-        m.box(-0.46, 0.38, 0.14, 0.46, 0.384, 1.78, "vending_glow")
-    m.box(-0.46, 0.384, 1.72, 0.46, 0.39, 1.78, "vending_glow")                           # 上部ライトボックス
-    m.box(-0.5, 0.376, 0.1, 0.5, 0.384, 0.14, "car_trim")
+        m.box(-0.54, 0.38, 0.14, 0.54, 0.384, 1.84, "vending_glow")
+    m.box(-0.54, 0.384, 1.78, 0.54, 0.39, 1.84, "vending_glow")                           # 上部ライトボックス
+    m.box(-0.58, 0.376, 0.1, 0.58, 0.384, 0.14, "car_trim")
 
 
 def recycle_bin(m, r):
@@ -647,12 +647,34 @@ def pole_guard(m, r):
     pipe(m, (0, 0, 1.6), (-3.0, 0, 6.8), 0.007, "wire", 4)
 
 
+def pole_closure(m, r):
+    """通信ケーブルの接続箱(円筒)+たるんだ予備ケーブルのループ+共架の添架バンド"""
+    m.cyl(0.0, 0.2, 5.6, 0.07, 0.55, "z", "pipe_gray", 10)
+    for z in (5.7, 6.0):
+        m.box(-0.02, 0.05, z, 0.02, 0.2, z + 0.03, "steel_galv")
+    loop = [(0.0, -0.2 - 0.1 * math.sin(math.pi * k / 10) * 2.0, 5.5 - 0.5 * math.sin(math.pi * k / 10)) for k in range(11)]
+    for a, b in zip(loop, loop[1:]):
+        pipe(m, a, b, 0.012, "wire", 5)
+
+
+def pole_trans(m, r):
+    """柱上変圧器(円筒缶+ブッシング)と高圧カットアウト"""
+    m.cyl(0.0, 0.32, 8.3, 0.22, 0.8, "z", "pipe_gray", 12)
+    for k in (-1, 0, 1):
+        m.cyl(k * 0.1, 0.32, 9.1, 0.025, 0.12, "z", "insulator", 8)
+    for sx in (-0.5, 0.0, 0.5):
+        m.box(sx - 0.04, 0.1, 9.6, sx + 0.04, 0.2, 9.9, "insulator")
+        pipe(m, (sx, 0.12, 9.9), (sx, 0.12, 10.2), 0.012, "steel_galv", 5)
+
+
 for _k in range(3):
     _cat(f"lf_pole_banner_{_k}", (lambda k: lambda m, r: pole_banner(m, k))(_k), 0.5, 3.5, "電柱付属")
 _cat("lf_pole_plate", pole_plate, 0.5, 4.0, "電柱付属")
 _cat("lf_pole_lamp", pole_lamp, 0.6, 5.6, "電柱付属")
 _cat("lf_pole_steps", pole_steps, 0.5, 6.0, "電柱付属")
 _cat("lf_pole_guard", pole_guard, 0.5, 1.7, "電柱付属")
+_cat("lf_pole_closure", pole_closure, 0.6, 6.2, "電柱付属")
+_cat("lf_pole_trans", pole_trans, 1.2, 10.3, "電柱付属")
 
 
 # ---------------- 縁石の欠け・歩道の植込み ----------------

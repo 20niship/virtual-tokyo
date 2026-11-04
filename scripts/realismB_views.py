@@ -40,10 +40,13 @@ def view_for(name, i, dist, h, lens=26, side=0.0):
     return View(name, (px, py, z + h), (i.x, i.y, z + 0.9), lens, "ground")
 
 
-def shoot(v, radius=70):
-    for dx, dy in [(0, 0), (0, 0)]:
-        city_render.render_view(w, tiles, v, radius, samples=samples, dmin=0.0)
-        break
+def shoot(v, radius=70, dmin=0.0):
+    for k in range(3):                                           # GPUを他プロセスと共有するためOptiXのコンパイル失敗時は再試行
+        try:
+            city_render.render_view(w, tiles, v, radius, samples=samples, dmin=dmin)
+            break
+        except RuntimeError as ex:
+            print("retry", v.name, str(ex)[:60])
     print("rendered", v.name, f"{time.time() - t0:.0f}s")
 
 
@@ -60,7 +63,7 @@ for f in only:
             cx, cy = a.x - (b.y - a.y) / d * t, a.y + (b.x - a.x) / d * t
             z = T(cx, cy)
             v = View(f"low_{k}", (cx, cy, z + 0.9), (cx + (b.x - a.x) / d * 14, cy + (b.y - a.y) / d * 14, z + 0.1), 28, "ground")
-            shoot(v)
+            shoot(v, 80, 36.0)
             made.append(v.name)
         continue
     pat = FEAT[f]

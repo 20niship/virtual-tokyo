@@ -125,6 +125,10 @@ def frontage(w, rng, occ, rix, fac):
                 put(f"lf_pot_{rng.randrange(3)}", rng.uniform(0.8, L - 0.8), 0.6)
             if L > 3 and r() < 0.22:
                 put(f"lf_ac_{rng.randrange(3)}", rng.uniform(0.8, L - 1.2), 0.1)
+            if L > 3 and r() < 0.2:
+                put("gas_meter_box", rng.uniform(0.5, L - 0.5), 0.0)
+            if L > 3 and r() < 0.1:
+                put("water_heater_unit", rng.uniform(0.5, L - 0.5), 0.05)
             if L > 4 and r() < 0.07:
                 put(f"lf_laundry_{rng.randrange(2)}", rng.uniform(1.2, L - 1.2), 0.7)
             if L > 3 and r() < 0.1:
@@ -240,10 +244,11 @@ def roadworks(w, rng, occ, rix):
     return out
 
 
-def construction(w, rng, rix, fac, n_max=8):
+def construction(w, rng, rix, fac, n_max=None):
     """中層建物の一部を足場+養生シートで覆い、道路側に仮囲いを立てる"""
     T = w["T"]
     out = []
+    n_max = n_max or max(2, int(w["area"].area / 1e5))          # 約10万m²(316m角)あたり1棟
     by = {}
     for f in fac:
         by.setdefault(f["bi"], []).append(f)
@@ -252,7 +257,7 @@ def construction(w, rng, rix, fac, n_max=8):
     for bi in cand[:n_max]:
         fs = by[bi]
         h = fs[0]["h"]
-        lifts = max(2, min(9, int(h / 1.9)))
+        lifts = max(2, min(6, int(h / 1.9)))
         mat = rng.choice(["white", "gray", "blue", "green"])
         for f in fs:
             mx, my = (f["p0"][0] + f["p1"][0]) / 2, (f["p0"][1] + f["p1"][1]) / 2
@@ -300,6 +305,10 @@ def pole_extras(w, rng, poles):
             out.append(Inst("lf_pole_lamp", p.x, p.y, p.z, p.rot + rng.choice([0, math.pi])))
         if r() < 0.5:
             out.append(Inst("lf_pole_steps", p.x, p.y, p.z, p.rot))
+        if r() < 0.35:
+            out.append(Inst("lf_pole_closure", p.x, p.y, p.z, p.rot + rng.choice([0, math.pi])))
+        if r() < 0.12 and "trans" not in p.name:
+            out.append(Inst("lf_pole_trans", p.x, p.y, p.z, p.rot + rng.choice([0, math.pi])))
     return out
 
 

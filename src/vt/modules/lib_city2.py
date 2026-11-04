@@ -235,7 +235,7 @@ SKIRT_TOPS = ["ped_tex_floral", "ped_tex_knit_beige", "ped_cloth_white", "ped_cl
 CASUAL_TOPS = ["ped_cloth_navy", "ped_cloth_gray", "ped_cloth_red", "ped_cloth_white", "ped_cloth_green", "ped_tex_plaid_red", "ped_tex_plaid_green", "ped_tex_stripe_navy",
                "ped_tex_knit_navy", "ped_cloth_yellow", "ped_cloth_orange", "ped_tex_plain_olive", "ped_tex_plain_mustard", "ped_cloth_sky"]
 BOTTOMS = ["ped_tex_denim", "ped_tex_denim_dark", "ped_cloth_black", "ped_cloth_gray", "ped_cloth_navy", "ped_cloth_beige", "ped_cloth_brown", "ped_tex_plain_olive"]
-HAIRS = ["ped_hair", "ped_hair_brown", "ped_hair_black", "ped_hair_black", "ped_hair_blonde", "ped_hair_gray"]
+HAIRS = ["ped_hair_black"] * 10 + ["ped_hair_brown"] * 3 + ["ped_hair"] * 3 + ["ped_hair_gray"] * 2 + ["ped_hair_blonde"]      # 日本の街: 黒髪が大半
 
 
 def ped(m, o):
@@ -252,19 +252,21 @@ def ped(m, o):
     for sx, ph in ((-0.09 * b, sw), (0.09 * b, -sw)):                                # 脚: 股関節→膝→足首(歩行で前後)
         knee = (sx * s, ph * 0.55 * s, 0.5 * s)
         ank = (sx * s, ph * s * 1.0 - (0.04 * s if ph < 0 else 0.0), 0.08 * s)
-        pipe(m, (sx * s, 0.0, hipz), knee, 0.068 * s * b, bottom, 8)
-        pipe(m, knee, ank, 0.052 * s * b, bottom if kind != "skirt" else "ped_skin", 8)
+        pipe(m, (sx * s, 0.0, hipz), knee, 0.082 * s * b, bottom, 10)
+        pipe(m, knee, ank, 0.062 * s * b, bottom if kind != "skirt" else "ped_skin", 10)
         m.box(sx * s - 0.05 * s, ank[1] - 0.07 * s, 0.0, sx * s + 0.05 * s, ank[1] + 0.17 * s, 0.075 * s, sh)
     if kind == "skirt":
         m.lathe(0, 0, 0.56 * s, [(0.25 * s * b, 0.0), (0.22 * s * b, 0.2 * s), (0.17 * s * b, 0.38 * s), (0.001, 0.38 * s)], bottom, 14)
     elif kind == "coat":
         m.lathe(0, 0, 0.58 * s, [(0.24 * s * b, 0.0), (0.22 * s * b, 0.3 * s), (0.18 * s * b, 0.5 * s), (0.17 * s * b, 0.78 * s)], top, 14)
-    def E(cx, cy, rx, ry, n=12):
+    def E(cx, cy, rx, ry, n=16):
         return [(cx + rx * math.cos(2 * math.pi * k / n), cy + ry * math.sin(2 * math.pi * k / n)) for k in range(n)]
     sy = lean * 0.2 * s
-    m.prism(E(0, 0, 0.16 * s * b, 0.1 * s, 12), "z", 0.84 * s, 1.0 * s, bottom if kind not in ("coat", "suit") else top)    # 腰
-    m.prism(E(0, sy * 0.4, 0.17 * s * b, 0.105 * s, 12), "z", 0.98 * s, 1.3 * s, top)                                          # 胴
-    m.prism(E(0, sy * 0.8, 0.2 * s * b, 0.1 * s, 12), "z", 1.28 * s, 1.4 * s, top)                                             # 肩
+    m.prism(E(0, 0, 0.165 * s * b, 0.11 * s), "z", 0.84 * s, 1.0 * s, bottom if kind not in ("coat", "suit") else top)    # 腰
+    m.prism(E(0, sy * 0.4, 0.18 * s * b, 0.118 * s), "z", 0.98 * s, 1.3 * s, top)                                          # 胴
+    m.prism(E(0, sy * 0.8, 0.21 * s * b, 0.112 * s), "z", 1.28 * s, 1.4 * s, top)                                             # 肩
+    if kind in ("pants", "suit"):
+        m.prism(E(0, 0, 0.168 * s * b, 0.114 * s), "z", 0.97 * s, 1.0 * s, "ped_shoe")                                                   # ベルト
     if kind == "suit":
         m.box(-0.04 * s, 0.103 * s + sy * 0.6, 1.16 * s, 0.04 * s, 0.108 * s + sy * 0.6, 1.36 * s, "ped_cloth_white")          # シャツの胸元
         m.box(-0.012 * s, 0.108 * s + sy * 0.6, 0.98 * s, 0.012 * s, 0.112 * s + sy * 0.6, 1.34 * s, o.get("tie", "ped_cloth_red"))  # ネクタイ
@@ -280,8 +282,8 @@ def ped(m, o):
             ph = (-sw if side == 1 else sw) * s * 0.9
             el = (sx + 0.01 * s * side, sh_y + ph * 0.5, 1.08 * s)
             ha = (sx + 0.02 * s * side, sh_y + ph * 0.9, 0.82 * s)
-        pipe(m, (sx, sh_y, 1.36 * s), el, 0.042 * s, top, 7)
-        pipe(m, el, ha, 0.036 * s, top if kind in ("coat", "suit") or o.get("longsleeve", True) else "ped_skin", 7)
+        pipe(m, (sx, sh_y, 1.36 * s), el, 0.05 * s, top, 9)
+        pipe(m, el, ha, 0.042 * s, top if kind in ("coat", "suit") or o.get("longsleeve", True) else "ped_skin", 9)
         m.lathe(ha[0], ha[1], ha[2] - 0.05 * s, [(0.001, 0.0), (0.035 * s, 0.025 * s), (0.04 * s, 0.07 * s), (0.001, 0.1 * s)], "ped_skin", 6)
         if side == 1 and pose == "phone":
             m.box(ha[0] - 0.03 * s, ha[1] - 0.005, ha[2] - 0.02 * s, ha[0] + 0.03 * s, ha[1] + 0.01, ha[2] + 0.1 * s, "ped_cloth_black")
@@ -289,7 +291,10 @@ def ped(m, o):
     m.cyl(0, sh_y, 1.38 * s, 0.045 * s, 0.07 * s, "z", "ped_skin", 8)                                                           # 首
     hy = sy * 1.4
     head = 1.43 * s
-    m.lathe(0, hy, head, [(0.001, 0.0), (0.075 * s, 0.03 * s), (0.095 * s, 0.1 * s), (0.09 * s, 0.17 * s), (0.06 * s, 0.215 * s), (0.001, 0.235 * s)], "ped_skin", 10)
+    m.lathe(0, hy, head, [(0.001, 0.0), (0.075 * s, 0.03 * s), (0.095 * s, 0.1 * s), (0.09 * s, 0.17 * s), (0.06 * s, 0.215 * s), (0.001, 0.235 * s)], "ped_skin", 14)
+    for ex in (-0.034, 0.034):                                                                                                      # 目
+        m.box(ex * s - 0.008 * s, hy + 0.083 * s, head + 0.135 * s, ex * s + 0.008 * s, hy + 0.092 * s, head + 0.147 * s, "glasses_dark")
+    m.box(-0.01 * s, hy + 0.088 * s, head + 0.085 * s, 0.01 * s, hy + 0.108 * s, head + 0.125 * s, "ped_skin")                      # 鼻
     hair = o.get("hair", "short")
     hc = o.get("hairc", "ped_hair")
     if hair != "none":
