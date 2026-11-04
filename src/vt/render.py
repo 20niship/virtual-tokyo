@@ -198,6 +198,12 @@ def _textured(nt, bsdf, d, base, texc, objinfo):
         else:
             L(texc.outputs["UV"], img.inputs["Vector"])
         L(img.outputs["Color"], bsdf.inputs["Base Color"])
+        if d.get("tint"):
+            tn = N("ShaderNodeMix"); tn.data_type = "RGBA"; tn.blend_type = "MULTIPLY"; tn.inputs[0].default_value = 1.0
+            tn.inputs[7].default_value = _rgb(d["tint"])
+            L(img.outputs["Color"], tn.inputs[6])
+            L(tn.outputs[2], bsdf.inputs["Base Color"])
+            img = type("T", (), {"outputs": {"Color": tn.outputs[2], "Alpha": img.outputs["Alpha"]}})()
         if d.get("alpha"):
             alpha = img.outputs["Alpha"]
         else:
@@ -289,7 +295,7 @@ def mesh_to_bpy(name, mesh):
     me.polygons.foreach_set("loop_total", np.array(nloops, dtype=np.int32))
     idx = {m: i for i, m in enumerate(mats)}
     me.polygons.foreach_set("material_index", np.array([idx[m] for m in mesh.m], dtype=np.int32))
-    me.polygons.foreach_set("use_smooth", np.zeros(len(mesh.f), dtype=bool))
+    me.polygons.foreach_set("use_smooth", np.full(len(mesh.f), bool(getattr(mesh, "smooth", False)), dtype=bool))
     me.update(calc_edges=True)
     # UV(ボックス投影, メートル基準)
     uv = me.uv_layers.new(name="UVMap")

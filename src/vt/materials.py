@@ -175,3 +175,4 @@ MATERIALS.update({
     "fence_sheet": M("#d9dcd8", 0.6, 0.2, dirt=1), "cone_orange": M("#ff5a00", 0.6), "boat_hull": M("#e6e8e8", 0.3, 0.2, dirt=1),
 })
 from . import materials_b  # noqa: E402,F401  (リアリズム強化B: 追記マテリアル)
+from . import materials_h  # noqa: E402,F401  (Anny 人物: 肌・服・髪)

@@ -15,3 +15,7 @@ out/modules/
 out/preview/
 data/dem/
 .claude/worktrees/
+data/humans/
+data/osm
+data/dem
+out/cache

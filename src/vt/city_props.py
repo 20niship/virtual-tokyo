@@ -21,11 +21,21 @@ def car_name(rng):
     return f"{'' if k == 'truck_kei' else 'car_'}{k}_{rng.choice(POOL.get(k, COLORS))}"
 
 
+HUMANS = "pedx"     # "anny": Anny 由来の人物(modules/lib_anny.py)を使う
+ANNY_G = dict(office="office", woman="casual", casual="casual", phone="casual", elder="elder", parasol="casual", student="student", kid="kid")
+
+
 def _ped(rng, rank=2):
     """歩行者モジュール名: 道路の格に応じて属性(会社員/女性/私服/スマホ/高齢者/日傘/学生/子供)の比率を変える"""
-    from .modules.lib_city2 import PEDX
     wt = PED_W[3 if rank >= 3 else rank]
     g = rng.choices(list(wt), weights=list(wt.values()))[0]
+    if HUMANS == "anny":
+        from .modules.lib_anny import NAMES
+        ag = ANNY_G[g]
+        if ag == "casual" and rng.random() < 0.08:
+            ag = "heavy"
+        return rng.choice(NAMES[ag])
+    from .modules.lib_city2 import PEDX
     return rng.choice(PEDX[g])
 
 

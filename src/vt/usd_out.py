@@ -59,6 +59,10 @@ def _tex(stage, mat, sh, path, d, texdir):
     tx.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(src, "result" if size else "result")
     tx.CreateInput("wrapS", Sdf.ValueTypeNames.Token).Set("repeat" if size else "clamp")
     tx.CreateInput("wrapT", Sdf.ValueTypeNames.Token).Set("repeat" if size else "clamp")
+    if d.get("tint"):
+        c = d["tint"].lstrip("#")
+        lin = [(x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4) for x in (int(c[i:i + 2], 16) / 255.0 for i in (0, 2, 4))]
+        tx.CreateInput("scale", Sdf.ValueTypeNames.Float4).Set(Gf.Vec4f(*lin, 1.0))
     tx.CreateOutput("rgb", Sdf.ValueTypeNames.Float3); tx.CreateOutput("a", Sdf.ValueTypeNames.Float)
     sh.GetInput("diffuseColor").ConnectToSource(tx.ConnectableAPI(), "rgb")
     if d.get("alpha"):
@@ -67,13 +71,47 @@ def _tex(stage, mat, sh, path, d, texdir):
             sh.CreateInput("opacityThreshold", Sdf.ValueTypeNames.Float).Set(float(d["cutout"]))
 
 
+def _vertex_normals(mesh):
+    """共有頂点の面積加重法線(mesh.smooth=True のメッシュ用)"""
+    V = np.array(mesh.v, dtype=np.float64)
+    n = np.zeros_like(V)
+    for f in mesh.f:
+        if len(f) >= 3:
+            fn = np.cross(V[f[1]] - V[f[0]], V[f[2]] - V[f[0]])
+            for i in f:
+                n[i] += fn
+    return n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+
+
+def _smooth_prim(stage, path, mesh, faces, vn, material, offset, mat):
+    """共有頂点+頂点法線のコンパクトな Mesh(人物など高密度メッシュ用)。明示UVがある面だけ faceVarying で持つ"""
+    used = sorted({i for f, _ in faces for i in f})
+    rm = {v: k for k, v in enumerate(used)}
+    g = UsdGeom.Mesh.Define(stage, path)
+    g.CreatePointsAttr(Vt.Vec3fArray([Gf.Vec3f(*(np.array(mesh.v[i]) + offset)) for i in used]))
+    g.CreateFaceVertexCountsAttr(Vt.IntArray([len(f) for f, _ in faces]))
+    g.CreateFaceVertexIndicesAttr(Vt.IntArray([rm[i] for f, _ in faces for i in f]))
+    g.CreateNormalsAttr(Vt.Vec3fArray([Gf.Vec3f(*vn[i]) for i in used])); g.SetNormalsInterpolation("vertex")
+    g.CreateSubdivisionSchemeAttr("none")
+    if MATERIALS.get(mat, {}).get("double_sided"):
+        g.CreateDoubleSidedAttr(True)
+    if any(u is not None for _, u in faces):
+        pv = UsdGeom.PrimvarsAPI(g).CreatePrimvar("st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.faceVarying)
+        pv.Set(Vt.Vec2fArray([Gf.Vec2f(float(a), float(b)) for f, u in faces for a, b in (u if u is not None else [(0, 0)] * len(f))]))
+    UsdShade.MaterialBindingAPI.Apply(g.GetPrim()).Bind(material)
+
+
 def _mesh_prims(stage, parent, mesh, mats, offset=(0, 0, 0)):
     """材質ごとに1つのUsdGeomMeshを作る(フラット法線 + ボックス投影UV[m])"""
     by = {}
     uvs = mesh.uv if len(mesh.uv) == len(mesh.f) else [None] * len(mesh.f)
     for f, m, u in zip(mesh.f, mesh.m, uvs):
         by.setdefault(m, []).append((f, u))
+    smooth_n = _vertex_normals(mesh) if getattr(mesh, "smooth", False) else None
     for mat, faces in by.items():
+        if smooth_n is not None:
+            _smooth_prim(stage, f"{parent}/{mat}", mesh, faces, smooth_n, mats[mat], offset, mat)
+            continue
         pts, counts, idx, nrm, uv = [], [], [], [], []
         for f, fuv in faces:
             P = np.array([mesh.v[i] for i in f], dtype=np.float64)
@@ -92,6 +130,8 @@ def _mesh_prims(stage, parent, mesh, mats, offset=(0, 0, 0)):
                 uv.append(Gf.Vec2f(float(u), float(v)))
             counts.append(len(f))
             idx.extend(range(base, base + len(f)))
+            if smooth_n is not None:
+                nrm[base:base + len(f)] = [Gf.Vec3f(*smooth_n[i]) for i in f]
         g = UsdGeom.Mesh.Define(stage, f"{parent}/{mat}")
         g.CreatePointsAttr(Vt.Vec3fArray(pts))
         g.CreateFaceVertexCountsAttr(Vt.IntArray(counts))
@@ -162,6 +202,8 @@ def write_all_modules(log=print):
     from .modules.library import REG, get
     paths = []
     for i, (n, r) in enumerate(REG.items(), 1):
+        if r.get("lazy"):
+            continue
         m = get(n)
         paths.append(write_module(n, m, r))
         log(f"[{i}/{len(REG)}] {n}: {len(m.f)} faces -> {paths[-1].relative_to(ROOT)}")

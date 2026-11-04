@@ -27,6 +27,7 @@ ap.add_argument("--render", action="store_true")
 ap.add_argument("--per", type=int, default=2)
 ap.add_argument("--no-props", action="store_true")
 ap.add_argument("--no-life", action="store_true", help="リアリズム強化B(路面オーバーレイ・生活感)を無効化")
+ap.add_argument("--humans", default="pedx", choices=["pedx", "anny"], help="歩行者: pedx=従来の低ポリ / anny=Anny由来(要 data/humans の CC0 アセット)")
 ap.add_argument("--samples", type=int, default=24)
 ap.add_argument("--radius", type=float, default=260)
 ap.add_argument("--only", default="")
@@ -36,6 +37,9 @@ ap.add_argument("--spot", default="", help="地点プリセット名(小領域 h
 ap.add_argument("--center", default="", help="lon,lat(--half と併用)")
 ap.add_argument("--round", default="1", help="out/render/spots/<spot>/round<N>/ に保存")
 a = ap.parse_args()
+if a.humans != "pedx":
+    from vt import city_props as _cp
+    _cp.HUMANS = a.humans
 
 CENTERS = {"odaiba": (139.7745, 35.6265), "west": (139.7455, 35.6405)}
 center, tag = CENTERS[a.region], ""
