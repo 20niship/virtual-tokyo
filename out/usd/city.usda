@@ -1,0 +1,14 @@
+#usda 1.0
+(
+    metersPerUnit = 1
+    subLayers = [
+        @./buildings.usda@,
+        @./vegetation.usda@,
+        @./furniture.usda@,
+        @./ground.usdc@,
+        @./roads.usdc@,
+        @./rail.usdc@
+    ]
+    upAxis = "Z"
+)
+
