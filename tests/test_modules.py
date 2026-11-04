@@ -37,3 +37,18 @@ def test_assemble_and_usd(tmp_path):
     p = usd_out.write_buildings([b], tmp_path / "b.usda")
     from pxr import Usd
     assert Usd.Stage.Open(str(p)).GetPrimAtPath(f"/City/Buildings/b1/Modules")
+
+
+def test_building_asset_references(tmp_path, monkeypatch):
+    from vt.assemble import build_building
+    from vt.layers import Feature
+    from shapely.geometry import Polygon
+    from vt import usd_out
+    from pxr import Usd
+    monkeypatch.setattr(usd_out, "BLDDIR", tmp_path / "assets/buildings")
+    f = Feature(7, Polygon([(0, 0), (20, 0), (20, 12), (0, 12)]), {"building": "apartments", "_top": 25.0, "_min": 0.0})
+    b = build_building(f)
+    p = usd_out.write_buildings_ref([b], tmp_path / "out/usd/buildings.usda")
+    st = Usd.Stage.Open(str(p))
+    assert st.GetPrimAtPath("/City/Buildings/b7/Modules")
+    assert (tmp_path / "assets/buildings/b7.usda").exists()
