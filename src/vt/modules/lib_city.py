@@ -8,32 +8,47 @@ PAINT = {"white": "car_paint_white", "black": "car_paint_black", "silver": "car_
          "blue": "car_paint_blue", "beige": "car_paint_beige", "green": "car_paint_green"}
 
 
-def _ring(w, rw, zb, zbelt, zroof, ztop_w=None):
-    """断面(y,z)のCCW輪郭: 下左→下右→ベルト右→ルーフ右→ルーフ左→ベルト左"""
-    return [(-w / 2, zb), (w / 2, zb), (w / 2, zbelt), (rw / 2, zroof), (-rw / 2, zroof), (-w / 2, zbelt)]
+def _ring(w, rw, zb, zbelt, zroof):
+    """断面(y,z)の10角形輪郭(面取り+ピラー傾斜+ルーフ肩): 底→右下面取り→右側面→右窓→右肩→屋根→左肩→左窓→左側面→左下面取り"""
+    dz = zroof - zbelt
+    ch = min(0.12, (zbelt - zb) * 0.4)
+    zg = zbelt + dz * 0.8
+    return [(-w / 2 + 0.1, zb), (w / 2 - 0.1, zb), (w / 2, zb + ch), (w / 2, zbelt), (rw / 2, zg), (rw / 2 - 0.12, zroof),
+            (-rw / 2 + 0.12, zroof), (-rw / 2, zg), (-w / 2, zbelt), (-w / 2, zb + ch)]
+
+
+def _smooth(secs, sub=3):
+    """断面列を区間ごとにsub分割し、Catmull-Romで滑らかに補間(ボンネット/ルーフの折れを丸める)。cabinは両端がTrueの区間のみTrue"""
+    out = []
+    n = len(secs)
+    for i in range(n - 1):
+        p0, p1, p2, p3 = secs[max(0, i - 1)], secs[i], secs[i + 1], secs[min(n - 1, i + 2)]
+        for t in [j / sub for j in range(sub)]:
+            def cr(k):
+                a0, a1, a2, a3 = p0[k], p1[k], p2[k], p3[k]
+                return 0.5 * (2 * a1 + (-a0 + a2) * t + (2 * a0 - 5 * a1 + 4 * a2 - a3) * t * t + (-a0 + 3 * a1 - 3 * a2 + a3) * t ** 3)
+            out.append((cr(0), cr(1), cr(2), cr(3), cr(4), p1[5] and p2[5]))
+    out.append(secs[-1])
+    return out
 
 
 def vehicle(m, L, W, secs, paint, wheel_r=0.32, wb=None, track=None, hood_x=None, kind="car"):
-    """secs: 後→前の断面 [(x, rw, zb, zbelt, zroof, cabin)] を結んで車体を作る(cabin=Trueでガラス面)。"""
+    """secs: 後→前の断面 [(x, rw, zb, zbelt, zroof, cabin)] を滑らかに補間して車体を作る(cabin=Trueでガラス面)。"""
+    src = secs
+    secs = _smooth(secs)
     rings = []
     for (x, rw, zb, zbelt, zroof, cabin) in secs:
         rings.append((x, _ring(W, rw, zb, zbelt, zroof), cabin))
     n = len(rings[0][1])
-    # 側面/屋根/下面
     for (x0, r0, c0), (x1, r1, c1) in zip(rings, rings[1:]):
         cabin = c0 and c1
         for k in range(n):
             k2 = (k + 1) % n
             q = [(x0, r0[k][0], r0[k][1]), (x0, r0[k2][0], r0[k2][1]), (x1, r1[k2][0], r1[k2][1]), (x1, r1[k][0], r1[k][1])]
-            # k: 0=下辺(底) 1=右側面下 2=右窓 3=屋根 4=左窓 5=左側面下
-            if k == 0:
-                mat = "car_under"
-            elif k in (2, 4):
-                mat = "car_glass" if cabin else paint
-            else:
-                mat = paint
+            mat = "car_under" if k == 0 else ("car_glass" if (k in (3, 7) and cabin) else paint)
             c = ((q[0][1] + q[2][1]) / 2, (q[0][2] + q[2][2]) / 2)
-            m.oriented(q, (0, c[0] - 0.0, c[1] - 0.8) if k != 0 else (0, 0, -1), mat)
+            m.oriented(q, (0, c[0], c[1] - 0.8) if k != 0 else (0, 0, -1), mat)
+    secs = src
     # 前後の面(フロントノーズ/テール): 輪郭を扇で閉じる
     for (x, r, c), sgn in ((rings[0], -1), (rings[-1], 1)):
         cy = sum(p[0] for p in r) / n
@@ -64,6 +79,9 @@ def vehicle(m, L, W, secs, paint, wheel_r=0.32, wb=None, track=None, hood_x=None
     for sy in (-1, 1):                                  # ヘッドライト/テールランプ
         m.box(xf - 0.02, sy * W * 0.34 - 0.18, zl - 0.06, xf + 0.012, sy * W * 0.34 + 0.18, zl + 0.08, "car_headlight")
         m.box(xr - 0.012, sy * W * 0.36 - 0.17, secs[0][3] - 0.2, xr + 0.02, sy * W * 0.36 + 0.17, secs[0][3] - 0.08, "car_taillight")
+    for xx, d in ((xf, 1), (xr, -1)):                                                            # 前後バンパー+グリル
+        m.box(xx - 0.03 * (1 if d > 0 else -1) - 0.03, -W * 0.46, zb + 0.02, xx + 0.03 * d + 0.03, W * 0.46, zb + 0.16, "car_under")
+    m.box(xf - 0.02, -W * 0.3, zb + 0.18, xf + 0.02, W * 0.3, zb + 0.32, "car_under")
     m.box(xf - 0.01, -0.26, zb + 0.18, xf + 0.012, 0.26, zb + 0.3, "car_plate")                # ナンバー
     m.box(xr - 0.012, -0.26, zb + 0.28, xr + 0.01, 0.26, zb + 0.4, "car_plate")
     for sy in (-1, 1):                                                                           # ドアミラー
@@ -126,23 +144,16 @@ def box_truck(m, paint="car_paint_white", L=6.2, H=3.3):
 
 
 def bus(m, paint="car_paint_bus"):
-    L, W, H = 10.5, 2.5, 3.1
+    L, W = 10.5, 2.5
     h = L / 2
-    m.box(-h, -W / 2, 0.45, h, W / 2, H, paint)
-    for sy in (-1, 1):
-        for i in range(8):                                                                                  # 窓
-            x = -h + 1.0 + i * 1.1
-            m.box(x, sy * (W / 2) - (0.0 if sy > 0 else 0.0) - 0.0 * sy, 1.45, x + 0.95, sy * (W / 2 + 0.01) + (0.0), 2.6, "car_glass") if False else \
-                m.box(x, sy * W / 2 - (0.01 if sy < 0 else -0.0), 1.45, x + 0.95, sy * W / 2 + (0.0 if sy < 0 else 0.01), 2.6, "car_glass")
-    m.box(h - 0.01, -W / 2 + 0.1, 1.2, h + 0.02, W / 2 - 0.1, 2.8, "car_glass")
-    m.box(h - 0.02, -0.7, 2.85, h + 0.02, 0.7, 3.0, "led_white")
-    m.box(-h - 0.02, -W / 2 + 0.1, 0.8, -h + 0.0, W / 2 - 0.1, 2.6, "car_glass")
-    for sx in (-3.4, 3.4):
-        for sy in (-1, 1):
-            m.cyl(sx, sy * (W / 2 - 0.1) - (0.14 if sy < 0 else 0.0), 0.5, 0.5, 0.28, "y", "car_tire", 16)
-    m.box(-h + 1.6, -W / 2 - 0.005, 0.5, -h + 3.0, -W / 2 + 0.0, 2.6, "car_paint_white") if False else None
-    m.box(h * 0.2, -W / 2 - 0.006, 0.45, h * 0.2 + 1.3, -W / 2 + 0.002, 2.9, "car_paint_white")           # 乗車ドア帯
-    m.box(-0.8, -0.9, H, 0.9, 0.9, H + 0.25, "steel_gray")                                                 # 屋根上の空調
+    secs = [(-h, 2.2, 0.4, 1.05, 3.0, False), (-h + 0.35, 2.34, 0.4, 1.05, 3.1, True), (h - 0.5, 2.34, 0.4, 1.05, 3.1, True), (h - 0.08, 2.2, 0.42, 0.95, 2.85, False), (h, 2.1, 0.45, 0.9, 2.5, False)]
+    vehicle(m, L, W, secs, paint, 0.5, 6.2, W - 0.1)
+    m.box(h * 0.2, -W / 2 - 0.006, 0.42, h * 0.2 + 1.3, -W / 2 + 0.002, 2.9, "car_paint_white")           # 乗車ドア帯
+    m.box(h * 0.2, W / 2 - 0.002, 0.42, h * 0.2 + 1.3, W / 2 + 0.006, 2.9, "car_paint_white")
+    for sy in (-1, 1):                                                                                    # 腰の白帯
+        m.box(-h + 0.4, sy * W / 2 - 0.004 * (sy > 0) - 0.006 * (sy < 0), 0.5, h - 0.6, sy * W / 2 + 0.006 * (sy > 0) + 0.004 * (sy < 0), 0.75, "car_paint_white")
+    m.box(h - 0.05, -0.8, 2.55, h + 0.02, 0.8, 2.75, "led_white")                                         # 行先表示
+    m.box(-0.8, -0.9, 3.1, 0.9, 0.9, 3.35, "steel_gray")                                                  # 屋根上の空調
 
 
 def motorbike(m):
@@ -183,23 +194,27 @@ reg("bicycle_plain", lambda m, W, H, r: bicycle(m, False), W=1.8, H=1.05, cat="�
 CLOTH = ["ped_cloth_navy", "ped_cloth_gray", "ped_cloth_red", "ped_cloth_white", "ped_cloth_green", "ped_cloth_beige", "ped_cloth_black"]
 
 
+def _ell(cx, cy, rx, ry, n=10):
+    return [(cx + rx * math.cos(2 * math.pi * k / n), cy + ry * math.sin(2 * math.pi * k / n)) for k in range(n)]
+
+
 def person(m, top, bottom, walking=False, h=1.7, child=False, bag=False):
+    """低ポリだが丸みのある人: 楕円断面の胴/腕/脚、卵形の頭+髪、靴、(歩行時)脚腕の前後振り"""
     s = 0.6 if child else h / 1.7
-    hy = 0.0
-    sw = 0.18 if walking else 0.0
-    # 脚
-    for sx, ph in ((-0.09, sw), (0.09, -sw)):
-        m.prism([(0, 0), (0.0, 0.0)], "z", 0, 0, "ped_skin") if False else None
-        m.box(sx * s - 0.055 * s, (-0.05 + ph) * s, 0.0, sx * s + 0.055 * s, (0.05 + ph) * s, 0.85 * s, bottom)
-        m.box(sx * s - 0.06 * s, (-0.04 + ph) * s, 0.0, sx * s + 0.06 * s, (0.13 + ph) * s, 0.06 * s, "ped_shoe")
-    m.box(-0.17 * s, -0.09 * s, 0.82 * s, 0.17 * s, 0.09 * s, 1.35 * s, top)                    # 胴
-    m.box(-0.2 * s, -0.1 * s, 1.25 * s, 0.2 * s, 0.1 * s, 1.42 * s, top)                         # 肩
-    for sx, ph in ((-0.22, -sw), (0.22, sw)):                                                    # 腕
-        m.box(sx * s - 0.04 * s, (-0.05 + ph) * s, 0.8 * s, sx * s + 0.04 * s, (0.05 + ph) * s, 1.38 * s, top)
-        m.box(sx * s - 0.035 * s, (-0.04 + ph) * s, 0.72 * s, sx * s + 0.035 * s, (0.04 + ph) * s, 0.82 * s, "ped_skin")
-    m.cyl(0, 0, 1.4 * s, 0.045 * s, 0.07 * s, "z", "ped_skin", 8)
-    m.cyl(0, 0, 1.46 * s, 0.1 * s, 0.21 * s, "z", "ped_skin", 10)                                # 頭
-    m.cyl(0, -0.005 * s, 1.58 * s, 0.105 * s, 0.1 * s, "z", "ped_hair", 10)
+    sw = 0.2 if walking else 0.0
+    for sx, ph in ((-0.09, sw), (0.09, -sw)):                                                    # 脚(大腿+下腿で膝を曲げる)
+        m.prism(_ell(sx * s, ph * s * 0.5, 0.062 * s, 0.065 * s, 8), "z", 0.45 * s, 0.88 * s, bottom)
+        m.prism(_ell(sx * s, ph * s * 0.8, 0.05 * s, 0.055 * s, 8), "z", 0.06 * s, 0.46 * s, bottom)
+        m.prism([(sx * s - 0.05 * s, (ph * 0.8 - 0.06) * s), (sx * s + 0.05 * s, (ph * 0.8 - 0.06) * s), (sx * s + 0.045 * s, (ph * 0.8 + 0.16) * s), (sx * s - 0.045 * s, (ph * 0.8 + 0.16) * s)], "z", 0.0, 0.07 * s, "ped_shoe")
+    m.prism(_ell(0, 0, 0.16 * s, 0.1 * s, 12), "z", 0.84 * s, 1.0 * s, bottom)                    # 腰
+    m.prism(_ell(0, 0, 0.17 * s, 0.1 * s, 12), "z", 0.98 * s, 1.3 * s, top)                      # 胴
+    m.prism(_ell(0, 0, 0.2 * s, 0.1 * s, 12), "z", 1.28 * s, 1.4 * s, top)                       # 肩
+    for sx, ph in ((-0.235, -sw), (0.235, sw)):                                                  # 腕(袖+手)
+        m.prism(_ell(sx * s, ph * s * 0.5, 0.04 * s, 0.045 * s, 8), "z", 0.88 * s, 1.38 * s, top)
+        m.prism(_ell(sx * s, ph * s * 0.7, 0.035 * s, 0.04 * s, 8), "z", 0.76 * s, 0.9 * s, "ped_skin")
+    m.cyl(0, 0, 1.38 * s, 0.045 * s, 0.07 * s, "z", "ped_skin", 8)                              # 首
+    m.lathe(0, 0, 1.43 * s, [(0.001, 0.0), (0.075 * s, 0.03 * s), (0.095 * s, 0.1 * s), (0.09 * s, 0.17 * s), (0.06 * s, 0.215 * s), (0.001, 0.235 * s)], "ped_skin", 10)   # 頭
+    m.lathe(0, -0.012 * s, 1.5 * s, [(0.095 * s, 0.0), (0.097 * s, 0.08 * s), (0.065 * s, 0.16 * s), (0.001, 0.185 * s)], "ped_hair", 10)                                      # 髪
     if bag:
         m.box(0.2 * s, -0.12 * s, 0.85 * s, 0.34 * s, 0.14 * s, 1.1 * s, "ped_cloth_black")
 
@@ -207,7 +222,7 @@ def person(m, top, bottom, walking=False, h=1.7, child=False, bag=False):
 for _i, _t in enumerate(CLOTH):
     _b = CLOTH[(_i * 3 + 2) % len(CLOTH)]
     for _w in (False, True):
-        reg(f"person_{'walk' if _w else 'stand'}_{_i}", (lambda t, b, w: lambda m, W, H, r: person(m, t, b, w, 1.55 + 0.35 * ((hash(t) % 7) / 7.0), False, w))(_t, _b, _w), W=0.6, H=1.8, cat="人")
+        reg(f"person_{'walk' if _w else 'stand'}_{_i}", (lambda t, b, w, hh: lambda m, W, H, r: person(m, t, b, w, hh, False, w))(_t, _b, _w, 1.55 + 0.05 * ((_i * 5) % 7)), W=0.6, H=1.8, cat="人")
 def container(m, L, color):
     W, H = 2.44, 2.59
     m.box(-L / 2, -W / 2, 0.0, L / 2, W / 2, H, color)

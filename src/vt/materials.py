@@ -158,10 +158,10 @@ MATERIALS.update({
 
 # ---- 最終フェーズ: 車両・人・汎用小物 ----
 MATERIALS.update({
-    "car_paint_white": M("#e8e8e4", 0.22, 0.45, dirt=1), "car_paint_black": M("#16171a", 0.2, 0.5, dirt=1), "car_paint_silver": M("#aeb2b6", 0.25, 0.7, dirt=1),
-    "car_paint_gray": M("#5a5f64", 0.25, 0.6, dirt=1), "car_paint_red": M("#a3161c", 0.22, 0.5, dirt=1), "car_paint_blue": M("#1c3f7a", 0.22, 0.5, dirt=1),
-    "car_paint_beige": M("#bba98a", 0.25, 0.5, dirt=1), "car_paint_green": M("#2f5a40", 0.25, 0.5, dirt=1), "car_paint_taxi": M("#1a1a1c", 0.2, 0.5, dirt=1),
-    "car_paint_bus": M("#2f7d4a", 0.3, 0.3, dirt=1),
+    "car_paint_white": M("#e8e8e4", 0.16, 0.55), "car_paint_black": M("#16171a", 0.14, 0.6), "car_paint_silver": M("#aeb2b6", 0.2, 0.8),
+    "car_paint_gray": M("#5a5f64", 0.2, 0.7), "car_paint_red": M("#a3161c", 0.16, 0.6), "car_paint_blue": M("#1c3f7a", 0.16, 0.6),
+    "car_paint_beige": M("#bba98a", 0.18, 0.6), "car_paint_green": M("#2f5a40", 0.18, 0.6), "car_paint_taxi": M("#1a1a1c", 0.14, 0.6),
+    "car_paint_bus": M("#2f7d4a", 0.25, 0.4),
     "car_glass": M("#26394a", 0.03, 0.55),
     "car_under": M("#1c1d1f", 0.9, 0.0), "car_tire": M("#1a1a1a", 0.9, 0.0), "car_wheel": M("#b5b8ba", 0.3, 0.9),
     "car_headlight": M("#f4f4ee", 0.1, emit=("#fff8e0", 1.2)), "car_taillight": M("#a01010", 0.2, emit=("#ff2a1a", 0.8)),

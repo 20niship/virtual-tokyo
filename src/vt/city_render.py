@@ -4,7 +4,7 @@ import random
 from pathlib import Path
 
 from PIL import Image, ImageDraw
-from shapely.geometry import Point
+from shapely.geometry import LineString, Point
 from shapely.ops import unary_union
 
 from . import ground, render
@@ -28,7 +28,7 @@ def pick_ground_views(w, seed=5, per=2):
     """歩道/車道/交差点/公園/広場/水辺/高架下/駐車場/路地/建物裏/駅前 から自動選定"""
     rng = random.Random(seed)
     T, area, edges, info = w["T"], w["area"], w["edges"], w["info"]
-    inner = area.buffer(-150)
+    inner = area.buffer(-min(150, (area.bounds[2] - area.bounds[0]) * 0.15))
     views = []
 
     from shapely.strtree import STRtree
@@ -37,11 +37,12 @@ def pick_ground_views(w, seed=5, per=2):
 
     def add(kind, x, y, dx, dy, zoff=0.0, lens=22):
         if not inner.contains(Point(x, y)):
-            return
-        if ftree is not None and any(foots[i].buffer(1.5).contains(Point(x, y)) for i in ftree.query(Point(x, y).buffer(2))):
-            return                                     # 建物の中/直近は選ばない(真っ黒になる)
+            return False
+        if ftree is not None and any(foots[i].buffer(3.0).contains(Point(x, y)) for i in ftree.query(Point(x, y).buffer(4))):
+            return False                               # 建物の中/直近は選ばない(真っ黒になる)
         z = T(x, y) + EYE + zoff
         views.append(View(f"g_{kind}_{len([v for v in views if v.kind == kind])}", (x, y, z), _look(x, y, dx, dy, z, 25, -0.05 * 25), lens, kind))
+        return True
 
     drive = [e for e in edges if e.kind == "drive" and e.level == 0 and e.line.length > 60 and inner.intersects(e.line)]
     major = [e for e in drive if e.tags["highway"] in ("trunk", "primary", "secondary", "tertiary")]
@@ -75,7 +76,8 @@ def pick_ground_views(w, seed=5, per=2):
         px, py, tx, ty = a[6][0], a[6][1], a[6][2], a[6][3]
         add("intersection", px + tx * 22, py + ty * 22, -tx, -ty, 0, 24)
     # 公園/広場/駐車場
-    for f in rng.sample([f for f in w["L"]["green"] if f.geom.area > 1500 and inner.contains(f.geom.centroid)], min(per, 4)) if w["L"]["green"] else []:
+    gr = [f for f in w["L"]["green"] if f.geom.area > 1500 and inner.contains(f.geom.centroid)]
+    for f in rng.sample(gr, min(per, len(gr))):
         c = f.geom.representative_point()
         add("park", c.x, c.y, rng.uniform(-1, 1), rng.uniform(-1, 1))
     park = [f for f in w["L"].get("landuse", []) if f.tags.get("amenity") == "parking" and f.geom.area > 800 and inner.contains(f.geom.centroid)]
@@ -89,7 +91,9 @@ def pick_ground_views(w, seed=5, per=2):
     # 水辺(護岸の内側から水へ向かって)
     land = w["land"]
     polys = [land] if land.geom_type == "Polygon" else list(land.geoms)
-    ring = max(polys, key=lambda p: p.area).exterior
+    ring = max(polys, key=lambda p: p.area).exterior if polys and not land.is_empty else None
+    if ring is None or ring.is_empty:
+        ring = LineString([(0, 0), (0, 0.0001)])
     cnt = 0
     for _ in range(40):
         if cnt >= per:
@@ -103,21 +107,28 @@ def pick_ground_views(w, seed=5, per=2):
         if inner.contains(Point(x, y)) and land.contains(Point(x, y)):
             add("waterfront", x, y, ox, oy)
             cnt += 1
-    # 高架下
-    for k, (e, (S, zs, p)) in enumerate([(e, info["elev"][e.id]) for e in edges if e.id in info["elev"] and e.line.length > 80][:60]):
-        if k % 5 == 0 and len([v for v in views if v.kind == "underdeck"]) < per:
-            s = e.line.length * 0.5
-            pt, q = e.line.interpolate(s), e.line.interpolate(s + 2)
-            add("underdeck", pt.x + 6, pt.y + 6, q.x - pt.x, q.y - pt.y)
+    # 高架下: 高架道路の桁の真下付近(横に±数m)から桁に沿って
+    for e in [e for e in edges if e.id in info["elev"] and e.line.length > 40]:
+        if len([v for v in views if v.kind == "underdeck"]) >= per:
+            break
+        for frac in (0.5, 0.3, 0.7):
+            pt, q = e.line.interpolate(e.line.length * frac), e.line.interpolate(e.line.length * frac + 2)
+            dx, dy = q.x - pt.x, q.y - pt.y
+            n = math.hypot(dx, dy) or 1
+            if any(add("underdeck", pt.x - dy / n * lat, pt.y + dx / n * lat, dx, dy) for lat in (3, -3, 7, -7)):
+                break
     # 建物裏: 建物の重心から道路と反対側
     bl = [b for b in w["builts"] if inner.contains(Point(b.insts[0].x, b.insts[0].y)) and b.meta["height"] > 15]
     for b in rng.sample(bl, min(per, len(bl))):
         x0, y0 = b.insts[0].x, b.insts[0].y
         add("behind", x0 + rng.uniform(-8, 8), y0 + rng.uniform(-8, 8), rng.uniform(-1, 1), rng.uniform(-1, 1), 0, 20)
-    # 駅前
+    # 駅前: 駅から8方向に12m離れた所を駅へ向けて
     for st in w["L"].get("stations", []):
         if inner.contains(st.geom) and len([v for v in views if v.kind == "station"]) < per:
-            add("station", st.geom.x + 8, st.geom.y + 8, -1, -1, 0, 20)
+            for k in range(8):
+                a = k * math.pi / 4
+                if add("station", st.geom.x + math.cos(a) * 14, st.geom.y + math.sin(a) * 14, -math.cos(a), -math.sin(a), 0, 20):
+                    break
     return views
 
 
@@ -126,12 +137,14 @@ def pick_aerial_views(w):
     T = w["T"]
     h = w["area"].bounds[2] - c[0]
     z0 = T(*c)
+    hs = [b.meta["height"] for b in w["builts"] if (b.insts[0].x - c[0]) ** 2 + (b.insts[0].y - c[1]) ** 2 < (h * 1.2) ** 2]
+    top = min(380.0, max(0.0, max(hs, default=0.0)) + 25.0)          # 最も高い建物の上から見下ろす(建物に埋まらない)
     vs = []
     for k, (ax, ay) in enumerate(((-1, -1), (1, -1), (1, 1), (-1, 1))):
-        vs.append(View(f"a_oblique_{k}", (c[0] + ax * h * 0.55, c[1] + ay * h * 0.55, z0 + 160), (c[0], c[1], z0 + 10), 30, "aerial"))
-    vs.append(View("a_top", (c[0], c[1], z0 + 520), (c[0], c[1], z0), 30, "aerial"))
-    vs.append(View("a_low_0", (c[0] - h * 0.4, c[1] - h * 0.5, z0 + 45), (c[0] + h * 0.2, c[1] + h * 0.1, z0 + 12), 28, "aerial"))
-    vs.append(View("a_low_1", (c[0] + h * 0.5, c[1] + h * 0.3, z0 + 60), (c[0] - h * 0.2, c[1] - h * 0.1, z0 + 15), 28, "aerial"))
+        vs.append(View(f"a_oblique_{k}", (c[0] + ax * h * 0.55, c[1] + ay * h * 0.55, z0 + max(60, h * 0.8, top)), (c[0], c[1], z0 + 10), 30, "aerial"))
+    vs.append(View("a_top", (c[0], c[1], z0 + h * 2.4), (c[0], c[1], z0), 30, "aerial"))
+    vs.append(View("a_low_0", (c[0] - h * 0.4, c[1] - h * 0.5, z0 + max(25, h * 0.25, top * 0.5)), (c[0] + h * 0.2, c[1] + h * 0.1, z0 + 12), 28, "aerial"))
+    vs.append(View("a_low_1", (c[0] + h * 0.5, c[1] + h * 0.3, z0 + max(30, h * 0.3, top * 0.5)), (c[0] - h * 0.2, c[1] - h * 0.1, z0 + 15), 28, "aerial"))
     return vs
 
 
@@ -140,13 +153,16 @@ def render_view(w, tiles, v, radius, samples=24, res=(1280, 720), extra=None):
     cx, cy = v.cam[0], v.cam[1]
     render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65))
     import bpy
-    bpy.context.scene.view_settings.exposure = -2.2 if v.kind != "aerial" else -2.6      # 谷間の道が暗く潰れすぎないように
+    vs = bpy.context.scene.view_settings
+    vs.look = "AgX - Base Contrast"                                  # 谷間の道が黒く潰れないよう、高コントラストlookをやめる
+    vs.exposure = -1.8 if v.kind != "aerial" else -2.4
+    bpy.context.scene.world.node_tree.nodes["Background"].inputs[1].default_value *= 2.0 if v.kind != "aerial" else 1.0   # 空光(谷間の環境光)を強める
     for name in ("g", "r", "t"):
         for (i, j), m in tiles[name].items():
             if w["tiler"].box(i, j).distance(Point(cx, cy)) < radius:
                 render.add_mesh_object(f"{name}{i}_{j}", m)
     render.add_plane(80000, 0.0, "water", loc=w["center"])          # 水平線までつながる広い水面
-    dmin = 6.0 if v.kind != "aerial" else 0.0           # カメラに重なる人/車を除く(視界が潰れるため)
+    dmin = 36.0 if v.kind != "aerial" else 0.0           # カメラに重なる人/車を除く(視界が潰れるため)
     near = lambda i: dmin < (i.x - cx) ** 2 + (i.y - cy) ** 2 < radius * radius
     sel = []
     for key in ("furn", "veg", "props"):
@@ -159,6 +175,29 @@ def render_view(w, tiles, v, radius, samples=24, res=(1280, 720), extra=None):
     render.add_camera(v.cam, v.tgt, v.lens)
     OUT.mkdir(parents=True, exist_ok=True)
     render.render(OUT / f"{v.name}.png")
+
+
+def mean_luma(name):
+    import numpy as np
+    return float(np.asarray(Image.open(OUT / f"{name}.png").convert("L"), dtype=np.float32).mean())
+
+
+def render_view_checked(w, tiles, v, radius, samples=24, res=(1280, 720), min_luma=22.0):
+    """真っ黒/暗すぎる(カメラが柱・桁・壁の中にある)ときは、視点を少しずらして撮り直し、最も明るい結果を残す"""
+    shifts = [(0, 0), (5, 0), (-5, 0), (0, 5), (0, -5), (9, 9), (-9, -9)] if v.kind != "aerial" else [(0, 0)]
+    best = (-1.0, None)
+    for dx, dy in shifts:
+        vv = View(v.name, (v.cam[0] + dx, v.cam[1] + dy, v.cam[2]), (v.tgt[0] + dx, v.tgt[1] + dy, v.tgt[2]), v.lens, v.kind)
+        render_view(w, tiles, vv, radius, samples, res)
+        lu = mean_luma(v.name)
+        if lu >= min_luma:
+            return lu
+        if lu > best[0]:
+            best = (lu, (dx, dy))
+    if best[1] != (shifts[-1]):
+        dx, dy = best[1]
+        render_view(w, tiles, View(v.name, (v.cam[0] + dx, v.cam[1] + dy, v.cam[2]), (v.tgt[0] + dx, v.tgt[1] + dy, v.tgt[2]), v.lens, v.kind), radius, samples, res)
+    return best[0]
 
 
 def make_tiles(w):
