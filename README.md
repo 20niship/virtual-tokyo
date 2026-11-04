@@ -1,5 +1,7 @@
 # Procedual生成された東京/お台場都市
 
+<p align="center"><img src="https://github.com/user-attachments/assets/85d3355d-9059-4ff4-9f32-59183678c9fa" alt="生成した都市のレンダリング(空中・夕景・夜景・車線目線・橋・高架・田舎・ロードサイド)" width="900"></p>
+
 BlenderとPythonを使って、OpenStreetMap(OSM)と国土地理院DEMから東京(お台場〜田町・品川)の街を手続き生成するプロジェクトです。生成物はUSDで出力します。UEのThe Matrix Awakensくらいフォトリアルで、現実と区別がつかない都市を目標にしています。
 
 ## 目次
@@ -21,6 +23,12 @@ BlenderとPythonを使って、OpenStreetMap(OSM)と国土地理院DEMから東�
 
 ## 思想: モジュール単位で作る
 
+<p align="center"><img src="https://github.com/user-attachments/assets/780cb5c1-d973-4142-a884-cc0679d3f1b2" alt="窓モジュールのギャラリー" width="720"></p>
+
+<p align="center"><img src="https://github.com/user-attachments/assets/ac1a0db7-7d73-4c08-b4c3-7ecb68713111" alt="1階(基壇部)モジュール" width="720"></p>
+
+<p align="center"><sub>1モジュール=1つのUSD。窓・1階・屋根・意匠などを組み合わせて建物にする</sub></p>
+
 - 都市は「**小さな部品(モジュール)を大量に作り、配置ルールで組み合わせる**」ことで作ります。窓1スパン、壁1スパン、庇、非常階段、屋上設備、信号機、標識、街路灯、木、車、人などがそれぞれ1つのモジュールです。
 - モジュールは **1モジュール=1つの `.usdc`**(`assets/modules/`)です。建物・ファニチャ・植栽・車などは、モジュールUSDを **reference** し、位置・回転・スケールを持つ **PointInstancer** で配置します(同じ部品を何万回でも低コストで使い回せる)。
 - 外形(躯体)・地面・道路・線路のような連続した面だけは、材質別のメッシュとして生成します。
@@ -30,6 +38,8 @@ BlenderとPythonを使って、OpenStreetMap(OSM)と国土地理院DEMから東�
 - 参考: UEのCity Sample(Matrix Awakens)のモジュール式手続き生成(下の参考リンク)。
 
 ## セットアップと実行
+
+<p align="center"><img src="https://github.com/user-attachments/assets/3505e2e9-4bf5-4365-a079-b23f3b0cf91c" alt="手続き生成したテクスチャ(路面・タイル・誘導ブロック・路面文字など。assets/textures にGit管理)" width="720"></p>
 
 ```bash
 # Python 3.11 + 依存(bpy 5.x, usd-core, shapely, pyproj, numpy, ...)は uv で導入
@@ -97,6 +107,12 @@ uv run python scripts/build_extra.py <spot> --round N   # 田舎/郊外/ロー�
 
 ## 生成パイプライン
 
+<p align="center"><img src="https://github.com/user-attachments/assets/2141de36-1dae-4fc6-84a4-e46063ad2f34" alt="植栽モジュール(樹木)のタイル" width="900"></p>
+
+<p align="center"><img src="https://github.com/user-attachments/assets/d9e62d84-bbf4-44fe-a5fd-93bd7464fe68" alt="レインボーブリッジ" width="720"></p>
+
+<p align="center"><img src="https://github.com/user-attachments/assets/1ac7d78c-6d23-4de6-88e9-95c4e35406c8" alt="首都高の桁と橋脚" width="720"></p>
+
 1. **OSM取得**(`osm_fetch.py`): 道路・建物・鉄道・水域・緑地・POI・街路樹・電柱などを取得して `data/osm/` に保存。
 2. **地形**(`world.py`): 国土地理院DEM(5m)を取得して平滑化。陸地・水面・護岸(直立/石積み/階段)を作る。
 3. **道路**(`roads.py`): 道路ごとに`RoadProfile`を決め、車道・歩道・交差点・標示・横断歩道を生成。高架は箱桁+橋脚。
@@ -108,6 +124,8 @@ uv run python scripts/build_extra.py <spot> --round N   # 田舎/郊外/ロー�
 
 ## 建物の生成
 
+<p align="center"><img src="https://github.com/user-attachments/assets/9b039d9d-014a-49d5-8d8d-c07b9e0a5bb4" alt="建物様式の一覧" width="900"></p>
+
 - 入口は `assemble.build_building(Feature)`。敷地ポリゴン・`building`タグ・階数/高さ・乱数シードから、様式(style)を選んで **躯体(シェル) + モジュール配置** を作る。
 - **様式(style)**: オフィス、タワマン、団地、商業ビル、倉庫、駐車場、ホテルなど16種に加え、田舎/郊外/ロードサイド/工場(`styles_extra.py`)を含め約50種。1階(基壇)・中層・最上階で別の階構成にでき、階高は用途別(住宅3.0m、事務所3.9m、工場4.5m など)。
 - **多様性の出し方**: 窓(引違い/FIX/連窓/縦スリット/出窓/高窓…約70種) × 窓まわり(庇/ルーバー/フィン/面格子) × 壁材 × 色 × 屋上設備 × セットバック・斜線ベベル。`bvar`(建物ごとの色むら)も付く。
@@ -117,6 +135,10 @@ uv run python scripts/build_extra.py <spot> --round N   # 田舎/郊外/ロー�
 
 ## 道路の生成
 
+<p align="center"><img src="https://github.com/user-attachments/assets/4fad2538-def5-46bb-95b9-26cc3fa33f33" alt="交差点(横断歩道・路面標示・信号)" width="900"></p>
+
+<p align="center"><img src="https://github.com/user-attachments/assets/0407fad0-1615-4290-8494-1a24d1cf85a2" alt="道路の真上からの図" width="900"></p>
+
 - 道路ごとに`RoadProfile`(車線数・車線幅・路肩・中央分離帯・歩道ON/OFF(左右別)・歩道幅・縁石高・植栽帯・自転車レーン・路面劣化)を持つ。決定順は **OSMタグ → 種別デフォルト → 乱数ジッター → ユーザー指定(上書き)**。乱数は`(osm_id, 区間index)`でシード固定。
 - **複数種類にする方法**: `roads.CFG`(`city_age / wetness / barrier_free_rate / tactile_rate / bike_lane_rate / parking_rate / bus_lane_rate / hump_rate / scramble_rate / escort_rate / ...`)を変えると、全体の傾向が変わる。種別ごとの基本値は`roads.BASE`、地区ごとの倍率で上書きもできる。
 - 交差点は隅切り・横断歩道(スクランブル含む)・停止線・右折レーン・導流帯・歩道コーナーの切り下げ・エスコートゾーン・点字ブロックを生成。立体交差(layer違い)は交差点を作らない。
@@ -124,6 +146,8 @@ uv run python scripts/build_extra.py <spot> --round N   # 田舎/郊外/ロー�
 - 標識は1枚のアトラス(`sign_atlas.png/json`、約140種)をUVで貼る。信号は旧式/LED/薄型/歩行者用/矢印付など、街灯・ガードレール・ガードパイプ・カーブミラー・電柱・電線も複数種類ある。
 
 ## 道路に沿って建物を配置する方法
+
+<p align="center"><img src="https://github.com/user-attachments/assets/1b4bb2d3-2a69-46b7-9584-3e1a31e49740" alt="街区から自動配置した西岸の空中図" width="900"></p>
 
 `blocks.py` の `infill()`(地区タイプ指定時は `district.infill()`)が、道路から街区・ロット・建物を自動で作る。
 
@@ -135,6 +159,8 @@ uv run python scripts/build_extra.py <spot> --round N   # 田舎/郊外/ロー�
 6. 実行: `uv run python scripts/build_city.py --region west --mode hybrid`。道路の両側にビルが連なる見た目になる(西岸で建物約2,500棟)。
 
 ## 別の地域を生成する方法
+
+<p align="center"><img src="https://github.com/user-attachments/assets/80c7c395-fac5-4033-a04a-5df1cce6170a" alt="地区タイプ(rural/suburb/roadside/factory/plant)のレンダ" width="900"></p>
 
 現在はお台場〜田町・品川を対象にしている。他の地域(日本国内)は次の手順で作る。
 
@@ -148,6 +174,8 @@ uv run python scripts/build_extra.py <spot> --round N   # 田舎/郊外/ロー�
 
 ## 新しいモジュールを追加する方法
 
+<p align="center"><img src="https://github.com/user-attachments/assets/af642cec-7d26-49b3-9938-21102b6d3db7" alt="車モジュールのギャラリー" width="900"></p>
+
 1. `src/vt/modules/lib_*.py` に、`@mod("名前", W=幅, H=高さ, cat="カテゴリ")` を付けた関数を追加する。関数は `fn(mesh, W, H, rng)` で、`Mesh`にフェース(材質名・UV付き)を足す。複数パターンは名前違いで `reg()` する。
 2. 材質は `materials.py`(または `materials_b.py`)のマテリアル表に足す。テクスチャが要る場合は `textures*.py` で手続き生成し、`assets/textures/` に置いてコミットする。
 3. `uv run python -c "from vt import usd_out; usd_out.write_all_modules()"` で `assets/modules/<名前>.usdc` を書き出す。
@@ -155,6 +183,8 @@ uv run python scripts/build_extra.py <spot> --round N   # 田舎/郊外/ロー�
 5. `scripts/render_gallery.py` でギャラリーレンダして見た目を確認し、`tests/` に最低限のテストを足す。
 
 ## レンダリング・確認用スクリプト
+
+<p align="center"><img src="https://github.com/user-attachments/assets/305c0c9f-04d2-43c0-aff4-17abfe5a8768" alt="夜景(窓の発光・街灯・信号)" width="900"></p>
 
 | スクリプト | 用途 |
 |---|---|
