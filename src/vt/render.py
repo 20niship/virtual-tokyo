@@ -18,6 +18,9 @@ def _rgb(h):
     return (*lin, 1.0)
 
 
+REAL = False          # init_scene(realism=True) で有効: 壁の汚れ・目地・ベベル・夜間発光
+
+
 def get_material(mid):
     if mid in _mat_cache:
         return _mat_cache[mid]
@@ -62,28 +65,33 @@ def get_material(mid):
     L(texc.outputs["Object"], fine.inputs["Vector"])
     if d.get("emit"):
         bsdf.inputs["Emission Color"].default_value = _rgb(d["emit"][0])
-        bsdf.inputs["Emission Strength"].default_value = d["emit"][1]
-    if d.get("glass"):
+        k = 1.0
+        if REAL and TIME != "day":       # 夜・夕景は街灯/看板/自販機/ヘッドライトを強く光らせる
+            k = (10.0 if mid == "led_white" else 40.0 if mid == "car_headlight" else 8.0 if mid.startswith(("sign_", "vend_")) else 1.5) * (1.0 if TIME == "night" else 0.4)
+        bsdf.inputs["Emission Strength"].default_value = d["emit"][1] * k
+    if d.get("glass") and REAL and mid == "glass_main":
+        # 窓ガラス: 透過を使わず「反射+室内(インテリアマッピング)」を1枚の表面で描く。窓ごとにカーテン/ブラインド/点灯が変わり、夜は窓が光る
+        from . import render_real
+        bsdf.inputs["IOR"].default_value = 1.5
+        bsdf.inputs["Metallic"].default_value = 0.15
+        rg = N("ShaderNodeMath"); rg.operation = "MULTIPLY_ADD"; rg.inputs[1].default_value = 0.06; rg.inputs[2].default_value = 0.03
+        L(objinfo.outputs["Random"], rg.inputs[0]); L(rg.outputs[0], bsdf.inputs["Roughness"])
+        render_real.interior(nt, out, bsdf, texc, objinfo)
+    elif d.get("glass"):
         bsdf.inputs["Transmission Weight"].default_value = 1.0
         bsdf.inputs["IOR"].default_value = 1.5
         bsdf.inputs["Base Color"].default_value = base
         if colsock:
             L(colsock, bsdf.inputs["Base Color"])
-        bsdf.inputs["Roughness"].default_value = 0.02
+        rg = N("ShaderNodeMath"); rg.operation = "MULTIPLY_ADD"; rg.inputs[1].default_value = 0.05; rg.inputs[2].default_value = 0.012   # 窓ごとに反射のにじみを変える
+        L(objinfo.outputs["Random"], rg.inputs[0]); L(rg.outputs[0], bsdf.inputs["Roughness"])
         mat.use_backface_culling = False
     elif d.get("interior"):
-        # 室内: カーテン色をランダム、2割は点灯(夜用)
-        ramp = N("ShaderNodeValToRGB"); ramp.color_ramp.interpolation = "CONSTANT"
-        cs = ["#2a2622", "#b8b2a0", "#6d7b88", "#d8d4c8", "#4a3d36", "#7a6a5a"]
-        while len(ramp.color_ramp.elements) < len(cs):
-            ramp.color_ramp.elements.new(0.5)
-        for i, c in enumerate(cs):
-            ramp.color_ramp.elements[i].position = i / len(cs) + 0.001
-            ramp.color_ramp.elements[i].color = _rgb(c)
-        ramp.color_ramp.elements[0].position = 0.0
-        L(objinfo.outputs["Random"], ramp.inputs[0])
-        L(ramp.outputs[0], bsdf.inputs["Base Color"])
-        bsdf.inputs["Roughness"].default_value = 0.9
+        from . import render_real
+        render_real.interior(nt, out, bsdf, texc, objinfo)
+    elif d.get("water"):
+        from . import render_real
+        render_real.water(nt, bsdf, texc)
     elif d.get("foliage"):
         _foliage(nt, out, bsdf, d, texc)
     elif d.get("tex") or d.get("wear"):
@@ -102,11 +110,20 @@ def get_material(mid):
             L(ramp2.outputs[0], mix.inputs[7])
         else:
             mix.inputs[7].default_value = (1, 1, 1, 1)
-        if colsock:
+        brick = None
+        if REAL and d.get("joint"):
+            from . import render_real
+            brick = render_real.brick(nt, d, base, texc)
+            L(brick.outputs["Color"], mix.inputs[6])
+        elif colsock:
             L(colsock, mix.inputs[6])
         else:
             mix.inputs[6].default_value = base
-        L(mix.outputs[2], bsdf.inputs["Base Color"])
+        basecol = mix.outputs[2]
+        if d.get("dirt") and REAL:
+            from . import render_real
+            basecol = render_real.grime(nt, basecol, texc, objinfo, d)
+        L(basecol, bsdf.inputs["Base Color"])
         rough = d["rough"]
         bsdf.inputs["Roughness"].default_value = rough
         if d.get("dirt"):
@@ -114,11 +131,23 @@ def get_material(mid):
             L(noise.outputs["Fac"], m2.inputs[0])
             L(m2.outputs[0], bsdf.inputs["Roughness"])
         bsdf.inputs["Metallic"].default_value = d["metal"]
-        if d.get("bump"):
-            bump = N("ShaderNodeBump"); bump.inputs["Strength"].default_value = min(1.0, d["bump"] * 0.5)
+        nrm = None
+        if REAL and d.get("metal", 0) < 0.95 and not d.get("emit"):
+            bv = N("ShaderNodeBevel"); bv.inputs["Radius"].default_value = 0.012; bv.samples = 3
+            nrm = bv.outputs[0]
+        if d.get("bump") or brick is not None:
+            bump = N("ShaderNodeBump"); bump.inputs["Strength"].default_value = min(1.0, (d.get("bump") or 0.5) * 0.5)
             bump.inputs["Distance"].default_value = 0.01
-            L(fine.outputs["Fac"], bump.inputs["Height"])
+            if brick is not None:
+                L(brick.outputs["Fac"], bump.inputs["Height"])
+                bump.inputs["Strength"].default_value = 0.8; bump.inputs["Distance"].default_value = d["joint"].get("depth", 0.004)
+            else:
+                L(fine.outputs["Fac"], bump.inputs["Height"])
+            if nrm is not None:
+                L(nrm, bump.inputs["Normal"])
             L(bump.outputs[0], bsdf.inputs["Normal"])
+        elif nrm is not None:
+            L(nrm, bsdf.inputs["Normal"])
         if d.get("wood"):
             wv = N("ShaderNodeTexWave"); wv.inputs["Scale"].default_value = 6; wv.inputs["Distortion"].default_value = 4
             L(texc.outputs["Object"], wv.inputs["Vector"])
@@ -127,6 +156,11 @@ def get_material(mid):
             L(wm.outputs[2], bsdf.inputs["Base Color"])
     if not d.get("glass"):
         bsdf.inputs["Metallic"].default_value = d["metal"]
+    if REAL and TIME != "day" and d.get("tex") in ("shop_atlas.png", "ad_atlas.png", "sign_atlas.png", "station_signs.png"):
+        img = next((n for n in nt.nodes if n.type == "TEX_IMAGE" and n.image and n.image.name.startswith(d["tex"][:8])), None)
+        if img is not None:       # 看板テクスチャを自発光させる(夜の店舗看板・広告)
+            L(img.outputs["Color"], bsdf.inputs["Emission Color"])
+            bsdf.inputs["Emission Strength"].default_value = 3.0 if TIME == "night" else 1.2
     _mat_cache[mid] = mat
     return mat
 
@@ -277,7 +311,82 @@ def mesh_to_bpy(name, mesh):
     return me
 
 
-def init_scene(res=(1600, 900), samples=48, sun_dir=(0.45, -0.35, 0.8), gpu=True):
+TIME = "day"          # init_scene(time=...) が設定。夜/夕景では窓明かり・看板の発光を材質へ入れる
+LIT = dict(day=0.0, dusk=0.28, night=0.5)    # 窓の点灯率
+HAZE = dict(day=(11.1, 13.8, 15.0, 1), dusk=(4.7, 3.1, 1.8, 1), night=(0.018, 0.048, 0.114, 1))     # 水平線の空の放射輝度(probeで実測、方位平均): 遠景はこの色へ収束
+HAZE_K = dict(day=1.6e-4, dusk=2.2e-4, night=1.0e-4)      # 消散係数[1/m]: 1kmで約15%、5kmで約55%が霞色へ
+
+
+def _w_math(nt, op, a, b=None, clamp=False):
+    """ワールド/材質ノードの Math を作って返す(a,b は socket か数値)"""
+    n = nt.nodes.new("ShaderNodeMath"); n.operation = op; n.use_clamp = clamp
+    for i, v in enumerate((a, b)):
+        if v is None:
+            continue
+        if isinstance(v, (int, float)):
+            n.inputs[i].default_value = v
+        else:
+            nt.links.new(v, n.inputs[i])
+    return n.outputs[0]
+
+
+def _world_nodes(w, sun_dir, time, realism):
+    nt = w.node_tree
+    nt.nodes.clear()
+    N, L = nt.nodes.new, nt.links.new
+    sky = N("ShaderNodeTexSky")
+    sky.sky_type = "MULTIPLE_SCATTERING"
+    d = Vector(sun_dir).normalized()
+    el = math.asin(d.z)
+    if realism and time == "dusk":
+        el = math.radians(4.0)
+    elif realism and time == "night":
+        el = math.radians(-9.0)
+    sky.sun_elevation = el
+    sky.sun_rotation = math.atan2(d.x, d.y)
+    sky.sun_size = math.radians(1.0)
+    if realism:
+        sky.air_density = 1.4 if time != "day" else 1.0
+        sky.aerosol_density = 2.2 if time != "day" else 1.6        # 都市の霞
+    bg = N("ShaderNodeBackground"); bg.inputs["Strength"].default_value = 1.0 if time != "night" else 3.0       # 夜は都市の光害で環境光を持ち上げる
+    out = N("ShaderNodeOutputWorld")
+    col = sky.outputs[0]
+    if realism and time != "night":
+        # 薄い雲: 方向を平面に投影して fBm、地平線付近は消す
+        tc = N("ShaderNodeTexCoord")
+        sep = N("ShaderNodeSeparateXYZ"); L(tc.outputs["Generated"], sep.inputs[0])
+        zz = _w_math(nt, "ADD", _w_math(nt, "MAXIMUM", sep.outputs[2], 0.0), 0.18)
+        cmb = N("ShaderNodeCombineXYZ")
+        L(_w_math(nt, "DIVIDE", sep.outputs[0], zz), cmb.inputs[0]); L(_w_math(nt, "DIVIDE", sep.outputs[1], zz), cmb.inputs[1])
+        nz = N("ShaderNodeTexNoise"); nz.noise_dimensions = "3D"
+        nz.inputs["Scale"].default_value = 1.7; nz.inputs["Detail"].default_value = 7.0; nz.inputs["Roughness"].default_value = 0.6
+        nz.inputs["Distortion"].default_value = 0.4
+        L(cmb.outputs[0], nz.inputs["Vector"])
+        rp = N("ShaderNodeMapRange"); rp.inputs[1].default_value = 0.46; rp.inputs[2].default_value = 0.70
+        L(nz.outputs["Fac"], rp.inputs[0])
+        fade = N("ShaderNodeMapRange"); fade.inputs[1].default_value = 0.03; fade.inputs[2].default_value = 0.35
+        L(sep.outputs[2], fade.inputs[0])
+        cf = _w_math(nt, "MULTIPLY", _w_math(nt, "MULTIPLY", rp.outputs[0], fade.outputs[0]), 0.62)
+        cc = N("ShaderNodeMix"); cc.data_type = "RGBA"
+        L(cf, cc.inputs[0]); L(sky.outputs[0], cc.inputs[6])
+        gray = N("ShaderNodeMix"); gray.data_type = "RGBA"; gray.blend_type = "MULTIPLY"; gray.inputs[0].default_value = 1.0
+        L(sky.outputs[0], gray.inputs[6]); gray.inputs[7].default_value = (0.78, 0.8, 0.84, 1) if time == "day" else (0.9, 0.7, 0.62, 1)
+        L(gray.outputs[2], cc.inputs[7])
+        col = cc.outputs[2]
+    if realism:
+        # 水平線より下は、水平線(仰角3.5°)の空の色で埋める: 暗い帯が出ず、遠景の霞(コンポジタ, HAZE色)へ自然につながる
+        tc2 = N("ShaderNodeTexCoord")
+        sz = N("ShaderNodeSeparateXYZ"); L(tc2.outputs["Generated"], sz.inputs[0])
+        cz = N("ShaderNodeCombineXYZ"); L(sz.outputs[0], cz.inputs[0]); L(sz.outputs[1], cz.inputs[1]); L(_w_math(nt, "MAXIMUM", sz.outputs[2], 0.06), cz.inputs[2])
+        L(cz.outputs[0], sky.inputs[0])
+    L(col, bg.inputs[0]); L(bg.outputs[0], out.inputs[0])
+    return sky
+
+
+def init_scene(res=(1600, 900), samples=48, sun_dir=(0.45, -0.35, 0.8), gpu=True, time="day", realism=False):
+    global TIME, REAL
+    TIME = time if realism else "day"
+    REAL = realism
     bpy.ops.wm.read_factory_settings(use_empty=True)
     _mat_cache.clear(); _img_cache.clear()
     sc = bpy.context.scene
@@ -311,18 +420,56 @@ def init_scene(res=(1600, 900), samples=48, sun_dir=(0.45, -0.35, 0.8), gpu=True
     w = bpy.data.worlds.new("w")
     sc.world = w
     w.use_nodes = True
-    nt = w.node_tree
-    nt.nodes.clear()
-    sky = nt.nodes.new("ShaderNodeTexSky")
-    sky.sky_type = "MULTIPLE_SCATTERING"
-    d = Vector(sun_dir).normalized()
-    sky.sun_elevation = math.asin(d.z)
-    sky.sun_rotation = math.atan2(d.x, d.y)
-    sky.sun_size = math.radians(1.0)
-    bg = nt.nodes.new("ShaderNodeBackground"); bg.inputs["Strength"].default_value = 1.0
-    out = nt.nodes.new("ShaderNodeOutputWorld")
-    nt.links.new(sky.outputs[0], bg.inputs[0]); nt.links.new(bg.outputs[0], out.inputs[0])
+    _world_nodes(w, sun_dir, time, realism)
+    if realism:
+        enable_haze(time)
+    if realism and time == "night":
+        # 月明かり(弱い青白い太陽光)
+        ld = bpy.data.lights.new("moon", "SUN"); ld.energy = 0.06; ld.color = (0.7, 0.8, 1.0); ld.angle = math.radians(1.5)
+        lo = bpy.data.objects.new("moon", ld); lo.rotation_euler = (math.radians(38), 0, math.radians(-30))
+        sc.collection.objects.link(lo)
     return sc
+
+
+def enable_haze(time):
+    """奥行きパスから 1-exp(-k z) だけ霞色へ混ぜる(空の画素=Depth巨大は除外)。ボリュームと違い無限遠の空を消さず、コストもほぼゼロ"""
+    sc = bpy.context.scene
+    sc.view_layers[0].use_pass_z = True
+    ng = bpy.data.node_groups.new("haze", "CompositorNodeTree")
+    sc.compositing_node_group = ng
+    ng.interface.new_socket("Image", in_out="OUTPUT", socket_type="NodeSocketColor")
+    N, L = ng.nodes.new, ng.links.new
+    rl = N("CompositorNodeRLayers"); out = N("NodeGroupOutput")
+    e = _w_math(ng, "POWER", 2.718281828, _w_math(ng, "MULTIPLY", rl.outputs["Depth"], -HAZE_K[time]))
+    fac = _w_math(ng, "MULTIPLY", _w_math(ng, "SUBTRACT", 1.0, e), _w_math(ng, "LESS_THAN", rl.outputs["Depth"], 60000.0), True)
+    mx = N("ShaderNodeMix"); mx.data_type = "RGBA"
+    L(fac, mx.inputs[0]); L(rl.outputs["Image"], mx.inputs[6]); mx.inputs[7].default_value = HAZE[time]
+    L(mx.outputs[2], out.inputs[0])
+
+
+def estimate_exposure(target=0.16, lo=-3.6, hi=1.2):
+    """低解像度・低サンプルの試し撮りの中央値(線形輝度)から露出[EV]を決める。谷間・高架下・夜でも潰れない/白飛びしない"""
+    import os, tempfile
+    from PIL import Image
+    sc = bpy.context.scene
+    save = (sc.render.resolution_percentage, sc.cycles.samples, sc.cycles.use_denoising, sc.view_settings.view_transform,
+            sc.view_settings.look, sc.view_settings.exposure)
+    sc.render.resolution_percentage = 20
+    sc.cycles.samples = 8
+    sc.cycles.use_denoising = False
+    sc.view_settings.view_transform = "Standard"; sc.view_settings.look = "None"; sc.view_settings.exposure = 0.0
+    fd, tmp = tempfile.mkstemp(suffix=".png"); os.close(fd)
+    render(tmp)
+    a = np.asarray(Image.open(tmp).convert("RGB"), dtype=np.float32) / 255.0
+    os.remove(tmp)
+    (sc.render.resolution_percentage, sc.cycles.samples, sc.cycles.use_denoising, sc.view_settings.view_transform,
+     sc.view_settings.look, sc.view_settings.exposure) = save
+    lin = np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** 2.4)
+    y = lin @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
+    yy = y[y < 0.95]
+    m = float(np.percentile(yy if yy.size > 50 else y, 50))     # 空の飽和画素は除く
+    ev = math.log2(target / max(m, 1e-4))
+    return max(lo, min(hi, ev))
 
 
 def add_camera(loc, target, lens=50):
