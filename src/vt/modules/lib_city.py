@@ -50,6 +50,14 @@ def vehicle(m, L, W, secs, paint, wheel_r=0.32, wb=None, track=None, hood_x=None
             m.cyl(cx, cy - (0.12 if sy < 0 else 0.0), wheel_r, wheel_r, 0.24, "y", "car_tire", 14)
             m.cyl(cx, cy + (-0.125 if sy < 0 else 0.01), wheel_r, wheel_r * 0.6, 0.0, "y", "car_wheel", 10) if False else \
                 m.cyl(cx, cy + (-0.125 if sy < 0 else 0.125), wheel_r, wheel_r * 0.62, 0.012, "y", "car_wheel", 12)
+    for sx in (-1, 1):                                  # ホイールアーチ(暗い円盤)
+        for sy in (-1, 1):
+            m.cyl(sx * wb / 2, sy * W / 2 - 0.012, wheel_r, wheel_r + 0.09, 0.024, "y", "car_under", 16)
+    zbelt = secs[len(secs) // 2][3]
+    for sy in (-1, 1):                                  # ドアの合わせ目とドアハンドル
+        for fx in (-0.1, 0.12):
+            m.box(fx * L, sy * W / 2 - 0.004, 0.36, fx * L + 0.012, sy * W / 2 + 0.004, zbelt, "car_under")
+        m.box(0.02 * L, sy * W / 2 - 0.01, zbelt - 0.12, 0.02 * L + 0.14, sy * W / 2 + 0.012, zbelt - 0.09, "car_wheel")
     xf, xr = rings[-1][0], rings[0][0]
     zb = secs[-1][2]
     zl = secs[-1][3] - 0.18
@@ -238,6 +246,62 @@ def traffic_cone(m):
 
 
 reg("traffic_cone", lambda m, W, H, r: traffic_cone(m), W=0.4, H=0.7, cat="資材")
+
+
+def fence_mesh(m, h=1.8):
+    """線路沿い・敷地境界の緑色メッシュフェンス(2m): 支柱+上下の横桟+細い格子"""
+    for x in (-1.0, 1.0):
+        m.cyl(x, 0, 0, 0.03, h + 0.1, "z", "steel_green", 8)
+    for z in (0.12, h):
+        m.cyl(-1.0, 0, z, 0.015, 2.0, "x", "steel_green", 6)
+    n = 40
+    for i in range(n + 1):
+        x = -1.0 + i * 2.0 / n
+        m.box(x - 0.004, -0.004, 0.12, x + 0.004, 0.004, h, "steel_green")
+    for k in range(1, 9):
+        m.box(-1.0, -0.004, 0.12 + k * (h - 0.12) / 9, 1.0, 0.004, 0.125 + k * (h - 0.12) / 9, "steel_green")
+
+
+reg("fence_mesh_2m", lambda m, W, H, r: fence_mesh(m), W=2.0, H=1.9, cat="資材")
+
+
+def playground(m, kind):
+    if kind == "slide":
+        for sx in (-0.4, 0.4):
+            m.box(sx - 0.03, -0.3, 0, sx + 0.03, -0.2, 2.2, "steel_galv")
+        m.box(-0.45, -0.35, 1.6, 0.45, -0.1, 1.68, "car_paint_red")
+        m.prism([(1.9, 0.3), (1.9, 0.36), (-0.1, 1.66), (-0.1, 1.6)], "x", -0.3, 0.3, "car_paint_blue")      # 滑り面
+        for sx in (-0.3, 0.3):                                                                                 # 側壁
+            m.prism([(1.9, 0.3), (1.9, 0.55), (-0.1, 1.9), (-0.1, 1.6)], "x", sx - 0.015, sx + 0.015, "car_paint_blue")
+    elif kind == "swing":
+        for sx in (-1.4, 1.4):
+            m.cyl(sx, -0.6, 0, 0.04, 2.4, "z", "steel_galv", 8)
+            m.cyl(sx, 0.6, 0, 0.04, 2.4, "z", "steel_galv", 8)
+        m.cyl(-1.45, 0, 2.4, 0.04, 2.9, "x", "steel_galv", 8)
+        for sx in (-0.5, 0.5):
+            m.cyl(sx, 0, 0.45, 0.01, 1.95, "z", "steel_gray", 6)
+            m.box(sx - 0.2, -0.08, 0.4, sx + 0.2, 0.08, 0.45, "car_paint_red")
+    else:                                   # 砂場
+        m.box(-1.2, -1.2, 0, 1.2, 1.2, 0.3, "wood")
+        m.box(-1.1, -1.1, 0.05, 1.1, 1.1, 0.28, "sidewalk_granite")
+
+
+for _k in ("slide", "swing", "sandpit"):
+    reg(f"playground_{_k}", (lambda k: lambda m, W, H, r: playground(m, k))(_k), W=3.0, H=2.5, cat="遊具")
+
+
+def pergola(m):
+    for sx in (-1.5, 1.5):
+        for sy in (-1.5, 1.5):
+            m.box(sx - 0.1, sy - 0.1, 0, sx + 0.1, sy + 0.1, 2.6, "wood")
+    for i in range(7):
+        y = -1.6 + i * 0.53
+        m.box(-1.8, y - 0.05, 2.6, 1.8, y + 0.05, 2.75, "wood")
+    for sy in (-1.5, 1.5):
+        m.box(-1.8, sy - 0.08, 2.45, 1.8, sy + 0.08, 2.6, "wood")
+
+
+reg("pergola_wood", lambda m, W, H, r: pergola(m), W=3.6, H=2.8, cat="遊具")
 
 
 def boat(m, L, W, kind):

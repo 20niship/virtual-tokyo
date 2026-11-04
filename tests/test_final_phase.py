@@ -50,6 +50,31 @@ def test_infill_fills_blocks_without_touching_roads_and_is_deterministic():
     assert top > 15
 
 
+def test_split_mesh_and_insts_by_tile_lose_nothing():
+    from vt.assemble import Inst
+    from vt.modules.geom import Mesh
+    t = city.Tiler(box(-100, -100, 100, 100).bounds, 100)
+    m = Mesh()
+    for x in (-50, 50):
+        for y in (-50, 50):
+            m.box(x - 1, y - 1, 0, x + 1, y + 1, 1, "rc_concrete_plain" if False else "grout")
+    parts = city.split_mesh(m, t)
+    assert sum(len(p.f) for p in parts.values()) == len(m.f) and len(parts) == 4
+    ins = [Inst("car_sedan_white", x, y, 0, 0) for x in (-60, 10, 90) for y in (-90, 20)]
+    by = city.split_insts(ins, t)
+    assert sum(len(v) for v in by.values()) == len(ins)
+
+
+def test_write_instances_usd(tmp_path):
+    from pxr import Usd
+    from vt import usd_out
+    from vt.assemble import Inst
+    p = usd_out.write_instances([Inst("car_sedan_white", 1, 2, 0, 0.5), Inst("person_walk_0", 3, 4, 0, 0)], tmp_path / "x.usdc", "Props_t0_0")
+    st = Usd.Stage.Open(str(p))
+    pi = st.GetPrimAtPath("/City/Props_t0_0/Instances")
+    assert pi and len(pi.GetAttribute("positions").Get()) == 2
+
+
 def test_vehicle_and_person_modules_build():
     names = [n for n, r in REG.items() if r["cat"] in ("車両", "人")]
     assert len(names) >= 40

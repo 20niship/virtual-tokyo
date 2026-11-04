@@ -139,6 +139,8 @@ def render_view(w, tiles, v, radius, samples=24, res=(1280, 720), extra=None):
     """tiles=dict(kind→dict(tile→メッシュ/インスタンス)); カメラ周辺radius[m]のタイル/インスタンスのみ"""
     cx, cy = v.cam[0], v.cam[1]
     render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65))
+    import bpy
+    bpy.context.scene.view_settings.exposure = -2.2 if v.kind != "aerial" else -2.6      # 谷間の道が暗く潰れすぎないように
     for name in ("g", "r", "t"):
         for (i, j), m in tiles[name].items():
             if w["tiler"].box(i, j).distance(Point(cx, cy)) < radius:

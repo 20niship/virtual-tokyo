@@ -162,7 +162,7 @@ MATERIALS.update({
     "car_paint_gray": M("#5a5f64", 0.25, 0.6, dirt=1), "car_paint_red": M("#a3161c", 0.22, 0.5, dirt=1), "car_paint_blue": M("#1c3f7a", 0.22, 0.5, dirt=1),
     "car_paint_beige": M("#bba98a", 0.25, 0.5, dirt=1), "car_paint_green": M("#2f5a40", 0.25, 0.5, dirt=1), "car_paint_taxi": M("#1a1a1c", 0.2, 0.5, dirt=1),
     "car_paint_bus": M("#2f7d4a", 0.3, 0.3, dirt=1),
-    "car_glass": M("#101820", 0.04, 0.0),
+    "car_glass": M("#26394a", 0.03, 0.55),
     "car_under": M("#1c1d1f", 0.9, 0.0), "car_tire": M("#1a1a1a", 0.9, 0.0), "car_wheel": M("#b5b8ba", 0.3, 0.9),
     "car_headlight": M("#f4f4ee", 0.1, emit=("#fff8e0", 1.2)), "car_taillight": M("#a01010", 0.2, emit=("#ff2a1a", 0.8)),
     "car_plate": M("#eef0ee", 0.4, 0.0), "car_taxi_lamp": M("#f4d46a", 0.3, emit=("#ffe59a", 2.0)),
