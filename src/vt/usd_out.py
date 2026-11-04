@@ -258,6 +258,31 @@ def write_buildings(builts, path=None):
     return path
 
 
+def write_instances(insts, path, root):
+    """任意の Inst 列を1つの PointInstancer(/City/<root>/Instances)で書く。root をタイルごとに変えて sublayer 同士のprimが衝突しないようにする。
+    ファイルは out/usd 直下に置く前提(モジュール参照は ../../assets/modules)。"""
+    st = Usd.Stage.CreateNew(str(path))
+    UsdGeom.SetStageUpAxis(st, UsdGeom.Tokens.z); UsdGeom.SetStageMetersPerUnit(st, 1.0)
+    UsdGeom.Xform.Define(st, "/City"); st.SetDefaultPrim(st.GetPrimAtPath("/City"))
+    UsdGeom.Xform.Define(st, f"/City/{root}")
+    pi = UsdGeom.PointInstancer.Define(st, f"/City/{root}/Instances")
+    UsdGeom.Scope.Define(st, f"/City/{root}/Instances/Prototypes")
+    names = sorted({i.name for i in insts})
+    protos = []
+    for n in names:
+        pp = f"/City/{root}/Instances/Prototypes/{n}"
+        st.DefinePrim(pp, "Xform").GetReferences().AddReference(f"../../assets/modules/{n}.usdc")
+        protos.append(Sdf.Path(pp))
+    pi.CreatePrototypesRel().SetTargets(protos)
+    ix = {n: i for i, n in enumerate(names)}
+    pi.CreateProtoIndicesAttr(Vt.IntArray([ix[i.name] for i in insts]))
+    pi.CreatePositionsAttr(Vt.Vec3fArray([Gf.Vec3f(i.x, i.y, i.z) for i in insts]))
+    pi.CreateOrientationsAttr(Vt.QuathArray([Gf.Quath(math.cos(i.rot / 2), 0, 0, math.sin(i.rot / 2)) for i in insts]))
+    pi.CreateScalesAttr(Vt.Vec3fArray([Gf.Vec3f(i.sx, i.sy, i.sz) for i in insts]))
+    st.GetRootLayer().Save()
+    return path
+
+
 def write_vegetation(insts, path=None):
     """植栽(樹木・低木・生垣・地被)の全インスタンスを1つのPointInstancerで。各モジュールUSDは葉アトラス(alpha cutout・両面)を参照"""
     OUTDIR.mkdir(parents=True, exist_ok=True)
