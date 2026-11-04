@@ -84,6 +84,8 @@ def get_material(mid):
         L(objinfo.outputs["Random"], ramp.inputs[0])
         L(ramp.outputs[0], bsdf.inputs["Base Color"])
         bsdf.inputs["Roughness"].default_value = 0.9
+    elif d.get("foliage"):
+        _foliage(nt, out, bsdf, d, texc)
     elif d.get("tex") or d.get("wear"):
         _textured(nt, bsdf, d, base, texc, objinfo)
     else:
@@ -199,6 +201,38 @@ def _textured(nt, bsdf, d, base, texc, objinfo):
         L(alpha, bsdf.inputs["Alpha"])
     bsdf.inputs["Roughness"].default_value = d["rough"]
     bsdf.inputs["Metallic"].default_value = d["metal"]
+
+
+def _foliage(nt, out, bsdf, d, texc):
+    """葉アトラス: alpha cutout・両面・個体ごとの色相/明度ジッター(object属性bvar)・透過光(Translucent)を混ぜる"""
+    N, L = nt.nodes.new, nt.links.new
+    img = N("ShaderNodeTexImage")
+    img.image = _image(d["tex"]); img.extension = "CLIP"; img.interpolation = "Linear"
+    L(texc.outputs["UV"], img.inputs["Vector"])
+    attr = N("ShaderNodeAttribute"); attr.attribute_type = "OBJECT"; attr.attribute_name = "bvar"
+    hs = N("ShaderNodeHueSaturation")
+    hm = N("ShaderNodeMapRange"); hm.inputs[3].default_value = 0.405; hm.inputs[4].default_value = 0.485     # 青緑寄りの葉を黄緑側へ寄せつつ個体差
+    vm = N("ShaderNodeMapRange"); vm.inputs[3].default_value = 0.62; vm.inputs[4].default_value = 0.86
+    hs.inputs["Saturation"].default_value = 1.2
+    L(attr.outputs["Fac"], hm.inputs[0]); L(attr.outputs["Fac"], vm.inputs[0])
+    L(hm.outputs[0], hs.inputs["Hue"]); L(vm.outputs[0], hs.inputs["Value"])
+    L(img.outputs["Color"], hs.inputs["Color"])
+    cut = N("ShaderNodeMath"); cut.operation = "GREATER_THAN"; cut.inputs[1].default_value = d.get("cutout", 0.45)
+    L(img.outputs["Alpha"], cut.inputs[0])
+    L(hs.outputs["Color"], bsdf.inputs["Base Color"])
+    bsdf.inputs["Roughness"].default_value = d["rough"]
+    tr = N("ShaderNodeBsdfTranslucent")
+    L(hs.outputs["Color"], tr.inputs["Color"])
+    mx = N("ShaderNodeMixShader")
+    mx.inputs[0].default_value = 0.35
+    L(bsdf.outputs[0], mx.inputs[1]); L(tr.outputs[0], mx.inputs[2])
+    tp = N("ShaderNodeBsdfTransparent")
+    cutmix = N("ShaderNodeMixShader")                 # alpha=0の所は完全に透明(影も落とさない)
+    L(cut.outputs[0], cutmix.inputs[0])
+    L(tp.outputs[0], cutmix.inputs[1]); L(mx.outputs[0], cutmix.inputs[2])
+    for lk in list(out.inputs[0].links):
+        nt.links.remove(lk)
+    L(cutmix.outputs[0], out.inputs[0])
 
 
 def mesh_to_bpy(name, mesh):

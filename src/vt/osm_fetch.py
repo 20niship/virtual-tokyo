@@ -46,6 +46,13 @@ EXTRA_QUERY = """[out:json][timeout:300];
   node["emergency"~"fire_hydrant|phone|defibrillator"]({b});
   node["traffic_calming"]({b});
   node["natural"="tree"]({b});
+  way["barrier"="hedge"]({b});
+  way["natural"~"tree_row|scrub|shrub"]({b});
+  node["natural"="shrub"]({b});
+  way["leisure"="garden"]({b});
+  way["landuse"~"flowerbed|forest"]({b});
+  way["natural"="wood"]({b});
+  node["amenity"="planter"]({b});
 );
 out geom;"""
 
