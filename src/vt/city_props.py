@@ -7,8 +7,28 @@ from shapely.geometry import Point
 
 from .assemble import Inst
 
-COLORS = ["white"] * 28 + ["black"] * 20 + ["silver"] * 18 + ["gray"] * 12 + ["blue"] * 6 + ["red"] * 5 + ["beige"] * 4
+COLORS = ["white"] * 28 + ["black"] * 20 + ["silver"] * 18 + ["gray"] * 12 + ["blue"] * 6 + ["red"] * 5 + ["beige"] * 4 + ["pearl"] * 10 + ["navy"] * 5 + ["wine"] * 3
 KINDS = ["sedan"] * 30 + ["hatch"] * 20 + ["suv"] * 16 + ["minivan"] * 14 + ["kei"] * 20
+CAR_KINDS = (["sedan"] * 22 + ["hatch"] * 16 + ["suv"] * 14 + ["minivan"] * 13 + ["kei"] * 16 + ["wagon"] * 6 + ["van"] * 5 + ["keivan"] * 4 + ["truck_kei"] * 3)
+POOL = {"wagon": ["white", "silver", "black", "gray", "pearl", "navy", "wine"], "van": ["white", "white", "silver", "pearl", "gray"], "keivan": ["white", "white", "silver", "sky", "yellow"],
+        "truck_kei": ["white", "white", "silver", "sky"], "kei": COLORS + ["sky"] * 6 + ["yellow"] * 3}
+PED_W = {3: dict(office=20, woman=14, casual=28, phone=8, elder=6, parasol=4, student=10, kid=4), 2: dict(office=10, woman=14, casual=32, phone=7, elder=10, parasol=4, student=12, kid=6),
+         1: dict(office=3, woman=14, casual=30, phone=5, elder=18, parasol=3, student=12, kid=14), 0: dict(office=4, woman=14, casual=34, phone=6, elder=12, parasol=6, student=10, kid=10)}
+
+
+def car_name(rng):
+    k = rng.choice(CAR_KINDS)
+    return f"{'' if k == 'truck_kei' else 'car_'}{k}_{rng.choice(POOL.get(k, COLORS))}"
+
+
+def _ped(rng, rank=2):
+    """歩行者モジュール名: 道路の格に応じて属性(会社員/女性/私服/スマホ/高齢者/日傘/学生/子供)の比率を変える"""
+    from .modules.lib_city2 import PEDX
+    wt = PED_W[3 if rank >= 3 else rank]
+    g = rng.choices(list(wt), weights=list(wt.values()))[0]
+    return rng.choice(PEDX[g])
+
+
 RANK = {"motorway": 6, "trunk": 5, "primary": 4, "secondary": 3, "tertiary": 2, "unclassified": 1, "residential": 1, "living_street": 0, "service": 0}
 
 
@@ -17,10 +37,10 @@ def _vehicle(rng, rank):
     if rank >= 3 and r < 0.06:
         return "car_taxi"
     if rank >= 4 and r < 0.09:
-        return "bus_city"
+        return rng.choice(["bus_city"] * 3 + ["bus_city_blue", "bus_city_white", "bus_city_red", "bus_coach", "bus_mini"])
     if rank >= 2 and r < 0.14:
-        return rng.choice(["truck_box_white", "truck_box_silver"])
-    return f"car_{rng.choice(KINDS)}_{rng.choice(COLORS)}"
+        return rng.choice(["truck_box_white", "truck_box_silver", "truck_box_white", "truck_dump"])
+    return car_name(rng)
 
 
 def _frame(line, s):
@@ -77,7 +97,7 @@ def parked_cars(w, rng):
                     x, y, tx, ty = _frame(e.line, s)
                     t = side * (p.half - 1.15)
                     cx, cy = x - ty * t, y + tx * t
-                    name = f"car_{rng.choice(KINDS)}_{rng.choice(COLORS)}"
+                    name = car_name(rng)
                     out.append(Inst(name, cx, cy, T(cx, cy) + 0.04, math.atan2(ty, tx) + (0 if rng.random() < 0.5 else math.pi)))
                 s += rng.uniform(5.4, 9.0)
     return out
@@ -103,19 +123,19 @@ def pedestrians(w, rng):
                     cx, cy = x - ty * t, y + tx * t
                     if sw.contains(Point(cx, cy)):
                         walk = rng.random() < 0.6
-                        nm = f"person_{'walk' if walk else 'stand'}_{rng.randrange(7)}" if rng.random() > 0.08 else rng.choice(["person_child_0", "person_child_1"])
+                        nm = _ped(rng, rank)
                         out.append(Inst(nm, cx, cy, T(cx, cy) + 0.14, math.atan2(ty, tx) - math.pi / 2 + (0 if rng.random() < 0.5 else math.pi)))
                         if rng.random() < 0.3:      # 連れ(2人組)
-                            out.append(Inst(f"person_walk_{rng.randrange(7)}", cx + tx * 0.7, cy + ty * 0.7, T(cx, cy) + 0.14, out[-1].rot))
+                            out.append(Inst(_ped(rng, rank), cx + tx * 0.7, cy + ty * 0.7, T(cx, cy) + 0.14, out[-1].rot))
                         if rng.random() < 0.06:     # 自転車
-                            out.append(Inst("bicycle_plain", cx + tx * 1.5, cy + ty * 1.5, T(cx, cy) + 0.14, math.atan2(ty, tx) + (0 if rng.random() < 0.5 else math.pi)))
+                            out.append(Inst(rng.choice(["cyclist_commuter", "cyclist_student", "cyclist_mama", "scooter_rider_0", "scooter_rider_1"]), cx + tx * 1.5, cy + ty * 1.5, T(cx, cy) + 0.14, math.atan2(ty, tx) + (0 if rng.random() < 0.5 else math.pi)))
                     s += gap * rng.uniform(0.4, 1.8)
         elif e.kind == "walk" and e.tags["highway"] in ("pedestrian", "footway", "cycleway"):
             s = rng.uniform(2, 35)
             while s < e.line.length - 2:
                 x, y, tx, ty = _frame(e.line, s)
                 cx, cy = x - ty * rng.uniform(-0.8, 0.8), y + tx * rng.uniform(-0.8, 0.8)
-                out.append(Inst(f"person_{'walk' if rng.random() < 0.7 else 'stand'}_{rng.randrange(7)}", cx, cy, T(cx, cy) + 0.04, math.atan2(ty, tx) - math.pi / 2 + (0 if rng.random() < 0.5 else math.pi)))
+                out.append(Inst(_ped(rng, 1), cx, cy, T(cx, cy) + 0.04, math.atan2(ty, tx) - math.pi / 2 + (0 if rng.random() < 0.5 else math.pi)))
                 s += rng.uniform(15, 60)
     # 横断歩道の待ち
     for a in w["info"]["arms"]:
@@ -125,7 +145,7 @@ def pedestrians(w, rng):
                 if rng.random() < 0.6:
                     cx, cy = px + nlx * sgn * (e.prof.half + 1.2) + tx * rng.uniform(-1.5, 1.5), py + nly * sgn * (e.prof.half + 1.2)
                     if sw.buffer(1).contains(Point(cx, cy)):
-                        out.append(Inst(f"person_stand_{rng.randrange(7)}", cx, cy, T(cx, cy) + 0.14, math.atan2(-nly * sgn, -nlx * sgn) - math.pi / 2))
+                        out.append(Inst(_ped(rng, 3), cx, cy, T(cx, cy) + 0.14, math.atan2(-nly * sgn, -nlx * sgn) - math.pi / 2))
     # 公園・緑地: 散策する人
     for f in w["L"]["green"]:
         if f.geom.area > 1200 and w["area"].contains(f.geom.centroid):
@@ -140,7 +160,7 @@ def pedestrians(w, rng):
                             pt = q
                             break
                 if pt is not None:
-                    out.append(Inst(f"person_{rng.choice(['walk', 'stand'])}_{rng.randrange(7)}", pt.x, pt.y, T(pt.x, pt.y) + 0.06, rng.uniform(0, 6.28)))
+                    out.append(Inst(_ped(rng, 0), pt.x, pt.y, T(pt.x, pt.y) + 0.06, rng.uniform(0, 6.28)))
     return out
 
 
@@ -288,7 +308,31 @@ def utility_lines(w, rng):
     return insts, wires
 
 
-def build_props(w, seed=21):
+def two_wheelers(w, rng):
+    """車道の路肩寄りを走るスクーター/バイク(ごく少数)"""
+    out = []
+    T = w["T"]
+    for e in w["edges"]:
+        if e.kind != "drive" or e.level != 0 or e.prof is None or e.line.length < 40:
+            continue
+        rank = RANK.get(e.tags["highway"], 0)
+        if rank < 1:
+            continue
+        p = e.prof
+        s = rng.uniform(5, 60)
+        while s < e.line.length - 6:
+            if rng.random() < 0.5:
+                x, y, tx, ty = _frame(e.line, s)
+                side = rng.choice((1, -1))
+                t = side * (p.half - 1.0)
+                cx, cy = x - ty * t, y + tx * t
+                if w["area"].contains(Point(cx, cy)):
+                    out.append(Inst(rng.choice(["scooter_rider_0", "scooter_rider_1", "motorbike_rider"]), cx, cy, T(cx, cy) + 0.04, math.atan2(ty, tx) + (0 if side < 0 else math.pi)))
+            s += rng.uniform(80, 220)
+    return out
+
+
+def build_props(w, seed=21, life=True):
     rng = random.Random(seed)
     out = list(w.get("props", []))
     pole_i, wire_m = utility_lines(w, rng)
@@ -301,4 +345,12 @@ def build_props(w, seed=21):
     out += parked_cars(w, rng)
     out += pedestrians(w, rng)
     out += elevated_cars(w, rng)
+    out += two_wheelers(w, rng)
+    if life:                                       # リアリズム強化B: 路面の経年・街の生活感(自販機/室外機/鉢/足場/電柱付属物/引込線…)
+        from . import city_life, overlays
+        out += overlays.road_overlays(w, random.Random(seed + 7))
+        pts = [(i.x, i.y) for i in list(w.get("furn", [])) + list(w.get("veg", [])) + out]
+        lf, drops = city_life.build_life(w, random.Random(seed + 8), pole_i, pts)
+        out += lf
+        w["g"].add(drops)
     return out
