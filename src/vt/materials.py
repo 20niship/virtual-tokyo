@@ -155,3 +155,22 @@ MATERIALS.update({
     "bench_wood": M("#8a6a44", 0.7, wood=1, vary=["#8a6a44", "#6b4f33", "#a98b62"]),
     "rubber_yellow": M("#f2c500", 0.8),
 })
+
+# ---- 最終フェーズ: 車両・人・汎用小物 ----
+MATERIALS.update({
+    "car_paint_white": M("#e8e8e4", 0.22, 0.45, dirt=1), "car_paint_black": M("#16171a", 0.2, 0.5, dirt=1), "car_paint_silver": M("#aeb2b6", 0.25, 0.7, dirt=1),
+    "car_paint_gray": M("#5a5f64", 0.25, 0.6, dirt=1), "car_paint_red": M("#a3161c", 0.22, 0.5, dirt=1), "car_paint_blue": M("#1c3f7a", 0.22, 0.5, dirt=1),
+    "car_paint_beige": M("#bba98a", 0.25, 0.5, dirt=1), "car_paint_green": M("#2f5a40", 0.25, 0.5, dirt=1), "car_paint_taxi": M("#1a1a1c", 0.2, 0.5, dirt=1),
+    "car_paint_bus": M("#2f7d4a", 0.3, 0.3, dirt=1),
+    "car_glass": M("#26394a", 0.03, 0.55),
+    "car_under": M("#1c1d1f", 0.9, 0.0), "car_tire": M("#1a1a1a", 0.9, 0.0), "car_wheel": M("#b5b8ba", 0.3, 0.9),
+    "car_headlight": M("#f4f4ee", 0.1, emit=("#fff8e0", 1.2)), "car_taillight": M("#a01010", 0.2, emit=("#ff2a1a", 0.8)),
+    "car_plate": M("#eef0ee", 0.4, 0.0), "car_taxi_lamp": M("#f4d46a", 0.3, emit=("#ffe59a", 2.0)),
+    "ped_skin": M("#c89a7a", 0.7, vary=["#e0b392", "#c89a7a", "#a87858", "#f0c8a8"]), "ped_hair": M("#1e1a18", 0.8, vary=["#1e1a18", "#3a2a20", "#7a6a58", "#c8c0b0"]),
+    "ped_shoe": M("#222222", 0.8),
+    "ped_cloth_navy": M("#1f2a44", 0.9), "ped_cloth_gray": M("#6a6d70", 0.9), "ped_cloth_red": M("#a8332f", 0.9), "ped_cloth_white": M("#d8d8d4", 0.9),
+    "ped_cloth_green": M("#3f6a48", 0.9), "ped_cloth_beige": M("#b5a58a", 0.9), "ped_cloth_black": M("#1a1a1c", 0.9),
+    "ctn_blue": M("#2a4f8a", 0.55, 0.4, dirt=1, rust=1), "ctn_red": M("#8a2a24", 0.55, 0.4, dirt=1, rust=1), "ctn_gray": M("#8a8e90", 0.55, 0.4, dirt=1, rust=1),
+    "ctn_green": M("#3a6a48", 0.55, 0.4, dirt=1, rust=1), "ctn_orange": M("#c8661c", 0.55, 0.4, dirt=1, rust=1),
+    "fence_sheet": M("#d9dcd8", 0.6, 0.2, dirt=1), "cone_orange": M("#ff5a00", 0.6), "boat_hull": M("#e6e8e8", 0.3, 0.2, dirt=1),
+})

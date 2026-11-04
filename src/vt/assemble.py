@@ -178,9 +178,12 @@ def _cap(mesh, geom, z, mat, up=True):
 
 
 def _core(mesh, poly, z0, z1, mat="core"):
-    c = list(poly.exterior.coords)
-    for a, b in zip(c, c[1:]):
-        mesh.poly([(a[0], a[1], z0), (b[0], b[1], z0), (b[0], b[1], z1), (a[0], a[1], z1)], mat)
+    for g in ([poly] if poly.geom_type == "Polygon" else list(getattr(poly, "geoms", []))):   # 細い建物はbufferで分裂することがある
+        if g.geom_type != "Polygon":
+            continue
+        c = list(g.exterior.coords)
+        for a, b in zip(c, c[1:]):
+            mesh.poly([(a[0], a[1], z0), (b[0], b[1], z0), (b[0], b[1], z1), (a[0], a[1], z1)], mat)
 
 
 def _edges(poly):
@@ -239,7 +242,7 @@ def _facade(B, poly, z0, floor_hs, S, rng, base=True, door_wanted=True):
         alt = rng.choice(alts) if alts else None
         kr = S.get("k", (2, 5))
         k = rng.randint(kr[0], kr[1]) if alt else 0
-        blank = (L < 3.0) or (n_f > 2 and rng.random() < 0.10)
+        blank = (L < 3.0) or (2 < n_f <= 8 and rng.random() < 0.10)   # 高層で一面が無窓になるのを避ける
         door_bay = rng.randrange(nb) if (ei == longest and not door_done and base) else -1
         if door_bay >= 0:
             door_done = True
@@ -391,7 +394,7 @@ def _roof_props(B, area_geom, z, S, rng, floors, top, bigarea):
         return
     total = sum(g.area for g in geoms)
     names, wts = zip(*S["roof"].items())
-    n = min(14, int(total / 110) + 1)
+    n = min(26, int(total / 65) + 2)       # 屋上設備を密に(空中視点で平らに見えない)
     if S is STYLES["warehouse"]:
         n = min(30, int(total / 90))
 

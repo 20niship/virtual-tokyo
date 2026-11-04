@@ -37,7 +37,7 @@ def get_material(mid):
     base = _rgb(d["color"])
     colsock = None
     if "vary" in d:
-        attr = N("ShaderNodeAttribute"); attr.attribute_type = "OBJECT"; attr.attribute_name = "bvar"
+        attr = N("ShaderNodeAttribute"); attr.attribute_type = "INSTANCER"; attr.attribute_name = "bvar"
         ramp = N("ShaderNodeValToRGB")
         cols = d["vary"]
         ramp.color_ramp.interpolation = "CONSTANT"
@@ -209,7 +209,7 @@ def _foliage(nt, out, bsdf, d, texc):
     img = N("ShaderNodeTexImage")
     img.image = _image(d["tex"]); img.extension = "CLIP"; img.interpolation = "Linear"
     L(texc.outputs["UV"], img.inputs["Vector"])
-    attr = N("ShaderNodeAttribute"); attr.attribute_type = "OBJECT"; attr.attribute_name = "bvar"
+    attr = N("ShaderNodeAttribute"); attr.attribute_type = "INSTANCER"; attr.attribute_name = "bvar"
     hs = N("ShaderNodeHueSaturation")
     hm = N("ShaderNodeMapRange"); hm.inputs[3].default_value = 0.405; hm.inputs[4].default_value = 0.485     # 青緑寄りの葉を黄緑側へ寄せつつ個体差
     vm = N("ShaderNodeMapRange"); vm.inputs[3].default_value = 0.62; vm.inputs[4].default_value = 0.86
@@ -484,6 +484,70 @@ def add_buildings(builts):
             o = bpy.data.objects.new(i.name, me)
             o.location = (i.x, i.y, i.z + b.meta.get("zbase", 0.0)); o.rotation_euler = (0, 0, i.rot); o.scale = (i.sx, i.sy, i.sz)
             o["bvar"] = b.meta["bvar"]; col.objects.link(o)
+
+
+def _gn_group(name):
+    """点→オブジェクトのインスタンス化(位置/回転/スケール/bvarは点属性)を行うGeometry Nodesグループ"""
+    g = bpy.data.node_groups.new(name, "GeometryNodeTree")
+    g.interface.new_socket("Geometry", in_out="INPUT", socket_type="NodeSocketGeometry")
+    g.interface.new_socket("Geometry", in_out="OUTPUT", socket_type="NodeSocketGeometry")
+    inp = g.nodes.new("NodeGroupInput")
+    out = g.nodes.new("NodeGroupOutput")
+    ip = g.nodes.new("GeometryNodeInstanceOnPoints")
+    oi = g.nodes.new("GeometryNodeObjectInfo")
+    oi.transform_space = "RELATIVE"
+    oi.inputs["As Instance"].default_value = True
+    rot = g.nodes.new("GeometryNodeInputNamedAttribute"); rot.data_type = "FLOAT_VECTOR"; rot.inputs["Name"].default_value = "rot"
+    scl = g.nodes.new("GeometryNodeInputNamedAttribute"); scl.data_type = "FLOAT_VECTOR"; scl.inputs["Name"].default_value = "scl"
+    L = g.links.new
+    L(inp.outputs[0], ip.inputs["Points"]); L(oi.outputs["Geometry"], ip.inputs["Instance"])
+    L(rot.outputs["Attribute"], ip.inputs["Rotation"]); L(scl.outputs["Attribute"], ip.inputs["Scale"])
+    L(ip.outputs["Instances"], out.inputs[0])
+    return g, oi
+
+
+def add_instances_gn(insts, bvars=None):
+    """大量インスタンス用: モジュールごとに1オブジェクト(点群)+Geometry Nodes のインスタンス化。個別オブジェクトを作るより桁違いに速くメモリも軽い。
+    bvars=None なら0.5固定、listなら insts と同順の建物ごとの色相値"""
+    from .modules.library import get
+    by = {}
+    for k, i in enumerate(insts):
+        by.setdefault(i.name, []).append(k)
+    col = bpy.context.scene.collection
+    for name, idx in by.items():
+        me = mesh_to_bpy(name, get(name))
+        src = bpy.data.objects.new(name + "_src", me)
+        col.objects.link(src)
+        src.hide_render = True
+        src.hide_viewport = True
+        pts = bpy.data.meshes.new(name + "_pts")
+        n = len(idx)
+        pts.vertices.add(n)
+        pts.vertices.foreach_set("co", np.array([(insts[k].x, insts[k].y, insts[k].z) for k in idx], dtype=np.float32).ravel())
+        for attr, vals in (("rot", [(0.0, 0.0, insts[k].rot) for k in idx]), ("scl", [(insts[k].sx, insts[k].sy, insts[k].sz) for k in idx])):
+            a = pts.attributes.new(attr, "FLOAT_VECTOR", "POINT")
+            a.data.foreach_set("vector", np.array(vals, dtype=np.float32).ravel())
+        a = pts.attributes.new("bvar", "FLOAT", "POINT")
+        a.data.foreach_set("value", np.array([0.5 if bvars is None else bvars[k] for k in idx], dtype=np.float32))
+        o = bpy.data.objects.new(name + "_inst", pts)
+        col.objects.link(o)
+        g, oi = _gn_group("gn_" + name)
+        oi.inputs["Object"].default_value = src
+        md = o.modifiers.new("inst", "NODES")
+        md.node_group = g
+
+
+def add_buildings_gn(builts):
+    """建物(Built)の殻は個別メッシュ、モジュールはGeometry Nodesでまとめてインスタンス化(建物ごとのbvarを点属性で渡す)"""
+    col = bpy.context.scene.collection
+    allv, allb = [], []
+    for b in builts:
+        so = bpy.data.objects.new(f"shell{b.id}", mesh_to_bpy(f"shell{b.id}", b.shell))
+        so["bvar"] = b.meta["bvar"]
+        col.objects.link(so)
+        allv += b.insts
+        allb += [b.meta["bvar"]] * len(b.insts)
+    add_instances_gn(allv, allb)
 
 
 def add_instances(insts):
