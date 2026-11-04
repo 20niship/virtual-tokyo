@@ -279,9 +279,9 @@ def build_tree(name, H=9.0, seed=0, season="summer"):
         if ra < 0.2:
             continue
         az = rng.uniform(0, 6.28)
-        rr = ra * rng.uniform(0.55, 1.0)
+        rr = ra * (rng.uniform(0.55, 1.0) if t < 0.85 else rng.uniform(0.0, 0.8))
         c = np.array([math.cos(az) * rr, math.sin(az) * rr, z]) + trunk[min(int(z / (H * 0.9 / n_t)), n_t)] * np.array([1, 1, 0])
-        out = norm(np.array([math.cos(az), math.sin(az), 0.35 * (1 - 2 * t) + 0.35]))
+        out = norm(np.array([math.cos(az), math.sin(az), 0.05 + 0.75 * t]))                  # 下は外向き、上ほど上向き(樹冠の頂部を覆う)
         nm = cl_pool[int(rng.integers(len(cl_pool)))]
         sz = ls * rng.uniform(1.7, 2.6)
         right = norm(np.cross(out, np.array([0, 0, 1.0]))) if abs(out[2]) < 0.9 else np.array([1.0, 0, 0])

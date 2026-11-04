@@ -264,7 +264,9 @@ def hedges_and_rows(V, X):
     nh = 0
     for f in X["hedges"]:
         g = f.geom.intersection(V.area)
-        parts = [g] if g.geom_type == "LineString" else [x for x in getattr(g, "geoms", []) if x.geom_type == "LineString"]
+        if g.is_empty:
+            continue
+        parts = [g] if g.geom_type == "LineString" else [x for x in getattr(g, "geoms", []) if x.geom_type == "LineString" and not x.is_empty]
         h = f.tags.get("height")
         try:
             hh = float(str(h).split()[0])
@@ -283,7 +285,9 @@ def hedges_and_rows(V, X):
     nr = 0
     for f in X["tree_rows"]:
         ln = f.geom.intersection(V.area)
-        parts = [ln] if ln.geom_type == "LineString" else [x for x in getattr(ln, "geoms", []) if x.geom_type == "LineString"]
+        if ln.is_empty:
+            continue
+        parts = [ln] if ln.geom_type == "LineString" else [x for x in getattr(ln, "geoms", []) if x.geom_type == "LineString" and not x.is_empty]
         sp = V.species_for(f.tags, "street")
         for ln in parts:
             s = rng.uniform(0, 4)

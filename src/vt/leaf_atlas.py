@@ -276,7 +276,7 @@ class Cards:
         card = Image.new("RGBA", (w * S2, h * S2), (0, 0, 0, 0))
         d = ImageDraw.Draw(card)
         if kind == "frond":
-            n = 34
+            n = 30
             x0, y0 = w * S2 * 0.06, h * S2 * 0.5
             x1, y1 = w * S2 * 0.97, h * S2 * 0.34
             d.line([(x0, y0), ((x0 + x1) / 2, h * S2 * 0.36), (x1, y1)], fill=(108, 120, 56, 255), width=7)
@@ -289,7 +289,7 @@ class Cards:
                     a = math.radians(side * rng.uniform(58, 78) + 10)
                     g = rng.uniform(0.75, 1.1)
                     ex, ey = x + math.sin(a) * L * 0.35, y - math.cos(a) * L * 0.1 + side * L * 0.72
-                    d.polygon([(x, y), ((x + ex) / 2 + 2, (y + ey) / 2 - 2), (ex, ey), ((x + ex) / 2 - 2, (y + ey) / 2 + 2)], fill=(int(58 * g), int(120 * g), int(44 * g), 255))
+                    d.polygon([(x - 2, y), ((x + ex) / 2 + 7, (y + ey) / 2 - 6), (ex, ey), ((x + ex) / 2 - 7, (y + ey) / 2 + 6), (x + 2, y)], fill=(int(62 * g), int(136 * g), int(46 * g), 255))
         else:
             cx, cy = w * S2 / 2, h * S2 * 0.92
             n = 26
@@ -402,7 +402,7 @@ def build_cards(by):
             cards.append((f"oval_cluster_{ss}_{v}", "cluster", ss, "broadleaf", C.cluster(384, 384, "oval", ss, 100 + v, 40)))
             cards.append((f"oval_twig_{ss}_{v}", "twig", ss, "broadleaf", C.twig(256, 320, "oval", ss, 200 + v, 56, 9)))
         for v in range(2):
-            cards.append((f"lobed_cluster_{ss}_{v}", "cluster", ss, "lobed", C.cluster(384, 384, "ivy", ss, 300 + v, 62)))
+            cards.append((f"lobed_cluster_{ss}_{v}", "cluster", ss, "lobed", C.cluster(384, 384, "lobed", ss, 300 + v, 62)))
             cards.append((f"ginkgo_{ss}_{v}", "twig", ss, "ginkgo", C.ginkgo(320, 256, ss, 400 + v, 120)))
         cards.append((f"round_cluster_{ss}_0", "cluster", ss, "broadleaf", C.cluster(384, 384, "round", ss, 500, 48)))
     for v in range(3):
@@ -450,6 +450,11 @@ def build(zip_path):
         by["ivy"] = by["round"] or by["oval"]
     if not by["round"]:
         by["round"] = by["oval"]
+    def lum(im):
+        a = np.asarray(im).astype(np.float32)
+        w = a[..., 3] / 255.0
+        return float((a[..., :3].mean(2) * w).sum() / max(w.sum(), 1.0))
+    by["lobed"] = [im for im in by["ivy"] if lum(im) < 112] or by["ivy"]       # 斑入りの白い葉を除いた掌状葉(プラタナス/カエデ用)
     cards = build_cards(by)
     raws = []
     for cls in ("oval", "round", "ivy", "narrow"):
