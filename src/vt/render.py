@@ -205,6 +205,8 @@ def _textured(nt, bsdf, d, base, texc, objinfo):
         if d.get("bump"):
             bw = N("ShaderNodeRGBToBW"); L(img.outputs["Color"], bw.inputs[0])
             bp = N("ShaderNodeBump"); bp.inputs["Strength"].default_value = min(1.0, d["bump"] * 0.5); bp.inputs["Distance"].default_value = 0.02
+            if REAL and d["tex"].startswith(("roof_", "corrugated", "siding_", "cmu_", "riprap", "steel_rusty")):    # 瓦・波板・サイディング・ブロック・石積みは凹凸を深く(近景の陰影)
+                bp.inputs["Strength"].default_value = min(1.0, d["bump"] * 0.8); bp.inputs["Distance"].default_value = 0.05
             L(bw.outputs[0], bp.inputs["Height"]); L(bp.outputs[0], bsdf.inputs["Normal"])
         # 汚れ・濃淡(低周波)で色ムラ
         nz = N("ShaderNodeTexNoise"); nz.inputs["Scale"].default_value = 0.35; nz.inputs["Detail"].default_value = 4
@@ -313,7 +315,7 @@ def mesh_to_bpy(name, mesh):
 
 TIME = "day"          # init_scene(time=...) が設定。夜/夕景では窓明かり・看板の発光を材質へ入れる
 LIT = dict(day=0.0, dusk=0.28, night=0.5)    # 窓の点灯率
-HAZE = dict(day=(11.1, 13.8, 15.0, 1), dusk=(4.7, 3.1, 1.8, 1), night=(0.018, 0.048, 0.114, 1))     # 水平線の空の放射輝度(probeで実測、方位平均): 遠景はこの色へ収束
+HAZE = dict(day=(11.1, 13.8, 15.0, 1), dusk=(4.7, 3.1, 1.8, 1), night=(0.033, 0.029, 0.042, 1))     # 水平線の空の放射輝度(probeで実測、方位平均): 遠景はこの色へ収束
 HAZE_K = dict(day=1.6e-4, dusk=2.2e-4, night=1.0e-4)      # 消散係数[1/m]: 1kmで約15%、5kmで約55%が霞色へ
 
 
@@ -348,7 +350,7 @@ def _world_nodes(w, sun_dir, time, realism):
     if realism:
         sky.air_density = 1.4 if time != "day" else 1.0
         sky.aerosol_density = 2.2 if time != "day" else 1.6        # 都市の霞
-    bg = N("ShaderNodeBackground"); bg.inputs["Strength"].default_value = 1.0 if time != "night" else 3.0       # 夜は都市の光害で環境光を持ち上げる
+    bg = N("ShaderNodeBackground"); bg.inputs["Strength"].default_value = 1.0
     out = N("ShaderNodeOutputWorld")
     col = sky.outputs[0]
     if realism and time != "night":
@@ -357,16 +359,16 @@ def _world_nodes(w, sun_dir, time, realism):
         sep = N("ShaderNodeSeparateXYZ"); L(tc.outputs["Generated"], sep.inputs[0])
         zz = _w_math(nt, "ADD", _w_math(nt, "MAXIMUM", sep.outputs[2], 0.0), 0.18)
         cmb = N("ShaderNodeCombineXYZ")
-        L(_w_math(nt, "DIVIDE", sep.outputs[0], zz), cmb.inputs[0]); L(_w_math(nt, "DIVIDE", sep.outputs[1], zz), cmb.inputs[1])
+        L(_w_math(nt, "MULTIPLY", _w_math(nt, "DIVIDE", sep.outputs[0], zz), 0.45), cmb.inputs[0]); L(_w_math(nt, "MULTIPLY", _w_math(nt, "DIVIDE", sep.outputs[1], zz), 1.6), cmb.inputs[1])   # 筋雲(一方向に伸びる)
         nz = N("ShaderNodeTexNoise"); nz.noise_dimensions = "3D"
         nz.inputs["Scale"].default_value = 1.7; nz.inputs["Detail"].default_value = 7.0; nz.inputs["Roughness"].default_value = 0.6
         nz.inputs["Distortion"].default_value = 0.4
         L(cmb.outputs[0], nz.inputs["Vector"])
-        rp = N("ShaderNodeMapRange"); rp.inputs[1].default_value = 0.46; rp.inputs[2].default_value = 0.70
+        rp = N("ShaderNodeMapRange"); rp.inputs[1].default_value = 0.40; rp.inputs[2].default_value = 0.66
         L(nz.outputs["Fac"], rp.inputs[0])
         fade = N("ShaderNodeMapRange"); fade.inputs[1].default_value = 0.03; fade.inputs[2].default_value = 0.35
         L(sep.outputs[2], fade.inputs[0])
-        cf = _w_math(nt, "MULTIPLY", _w_math(nt, "MULTIPLY", rp.outputs[0], fade.outputs[0]), 0.62)
+        cf = _w_math(nt, "MULTIPLY", _w_math(nt, "MULTIPLY", rp.outputs[0], fade.outputs[0]), 0.8)
         cc = N("ShaderNodeMix"); cc.data_type = "RGBA"
         L(cf, cc.inputs[0]); L(sky.outputs[0], cc.inputs[6])
         gray = N("ShaderNodeMix"); gray.data_type = "RGBA"; gray.blend_type = "MULTIPLY"; gray.inputs[0].default_value = 1.0
@@ -379,6 +381,10 @@ def _world_nodes(w, sun_dir, time, realism):
         sz = N("ShaderNodeSeparateXYZ"); L(tc2.outputs["Generated"], sz.inputs[0])
         cz = N("ShaderNodeCombineXYZ"); L(sz.outputs[0], cz.inputs[0]); L(sz.outputs[1], cz.inputs[1]); L(_w_math(nt, "MAXIMUM", sz.outputs[2], 0.06), cz.inputs[2])
         L(cz.outputs[0], sky.inputs[0])
+    if realism and time == "night":
+        gl = N("ShaderNodeMix"); gl.data_type = "RGBA"; gl.inputs[0].default_value = 0.85     # 都市の光害: 紫がかった灰色の夜空
+        L(col, gl.inputs[6]); gl.inputs[7].default_value = HAZE["night"]
+        col = gl.outputs[2]
     L(col, bg.inputs[0]); L(bg.outputs[0], out.inputs[0])
     return sky
 
@@ -425,7 +431,7 @@ def init_scene(res=(1600, 900), samples=48, sun_dir=(0.45, -0.35, 0.8), gpu=True
         enable_haze(time)
     if realism and time == "night":
         # 月明かり(弱い青白い太陽光)
-        ld = bpy.data.lights.new("moon", "SUN"); ld.energy = 0.06; ld.color = (0.7, 0.8, 1.0); ld.angle = math.radians(1.5)
+        ld = bpy.data.lights.new("moon", "SUN"); ld.energy = 0.035; ld.color = (0.7, 0.8, 1.0); ld.angle = math.radians(1.5)
         lo = bpy.data.objects.new("moon", ld); lo.rotation_euler = (math.radians(38), 0, math.radians(-30))
         sc.collection.objects.link(lo)
     return sc

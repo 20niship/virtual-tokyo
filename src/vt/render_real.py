@@ -54,7 +54,7 @@ def grime(nt, basecol, texc, objinfo, d):
     L(rv.outputs[0], off.inputs[0]); L(off.outputs[0], mp.inputs["Location"])
     L(texc.outputs["Object"], mp.inputs["Vector"]); L(mp.outputs[0], img.inputs["Vector"])
     sep = N("ShaderNodeSeparateColor"); L(img.outputs["Color"], sep.inputs[0])
-    st = d.get("grime", 1.0)
+    st = d.get("grime", 1.4)
     dk = N("ShaderNodeMix"); dk.data_type = "RGBA"; dk.blend_type = "MULTIPLY"
     ftot = mth(nt, "ADD", mth(nt, "MULTIPLY", sep.outputs[0], 0.5 * st), mth(nt, "MULTIPLY", sep.outputs[1], 0.42 * st), True)
     L(ftot, dk.inputs[0]); L(basecol, dk.inputs[6]); dk.inputs[7].default_value = (0.38, 0.35, 0.32, 1)
@@ -157,7 +157,7 @@ def water(nt, bsdf, texc):
     N, L = nt.nodes.new, nt.links.new
     R = _R()
     bsdf.inputs["IOR"].default_value = 1.333
-    bsdf.inputs["Roughness"].default_value = 0.10
+    bsdf.inputs["Roughness"].default_value = 0.05          # 運河・湾は鏡のように建物の灯りを映す
     bsdf.inputs["Metallic"].default_value = 0.0
     mp = N("ShaderNodeMapping"); mp.inputs["Scale"].default_value = (0.35, 0.8, 1.0)      # 波は一方向に長い
     L(texc.outputs["Object"], mp.inputs["Vector"])
@@ -167,8 +167,8 @@ def water(nt, bsdf, texc):
     L(texc.outputs["Object"], n2.inputs["Vector"])
     hs = N("ShaderNodeMix"); hs.data_type = "RGBA"; hs.inputs[0].default_value = 0.5
     L(n1.outputs["Fac"], hs.inputs[6]); L(n2.outputs["Fac"], hs.inputs[7])
-    bp = N("ShaderNodeBump"); bp.inputs["Strength"].default_value = 0.35; bp.inputs["Distance"].default_value = 0.4
+    bp = N("ShaderNodeBump"); bp.inputs["Strength"].default_value = 0.22; bp.inputs["Distance"].default_value = 0.3
     L(hs.outputs[2], bp.inputs["Height"]); L(bp.outputs[0], bsdf.inputs["Normal"])
     mc = N("ShaderNodeMix"); mc.data_type = "RGBA"
-    L(n2.outputs["Fac"], mc.inputs[0]); mc.inputs[6].default_value = R._rgb("#0f3440"); mc.inputs[7].default_value = R._rgb("#2c5a58")
+    L(n2.outputs["Fac"], mc.inputs[0]); mc.inputs[6].default_value = R._rgb("#0a2226"); mc.inputs[7].default_value = R._rgb("#1d3a36")
     L(mc.outputs[2], bsdf.inputs["Base Color"])
