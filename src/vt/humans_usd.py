@@ -1,6 +1,7 @@
 """Anny 人物の USD 出力: UsdSkel(スケルトン+スキンウェイト+歩行アニメ)のヒーローアセットと、姿勢を焼いた軽量メッシュ。
 座標はモジュール規約(前=+y、足元 z=0、m)。テクスチャ・材質は assets/textures を ../textures で参照する。"""
 import math
+import re
 from pathlib import Path
 
 import numpy as np
@@ -89,11 +90,8 @@ def _body_mats(b, parts):
 
 def walk_clip(spec, frames=24):
     """歩行1周期: (frames,B,4,4) のワールド骨行列(Anny座標)"""
-    out = []
-    for i in range(frames):
-        r = H.run(spec["p"], "anny", H.pose("walk", 2 * math.pi * i / frames, __import__("random").Random(spec["seed"])))
-        out.append(r["bone_poses"])
-    return np.array(out)
+    from . import humans_motion as HM
+    return np.array([H.run(spec["p"], "anny", HM.pose_at("walk", i / frames), spec.get("local"), spec.get("expr"))["bone_poses"] for i in range(frames)])
 
 
 def write_hero(spec, path=None, outfit=None, anim=True):
@@ -117,7 +115,7 @@ def write_hero(spec, path=None, outfit=None, anim=True):
         pr.CreateAttribute(k, t).Set(v)
     used = {"anny_iris", "anny_sclera", "anny_mouth", "anny_eye_dark", f"anny_skin_{of['skin']}", f"anny_shoe_{of['shoe_color']}"}
     for c in b["cloth"]:
-        used.add(f"anny_hair_{of['hair']}_{of['hair_color']}" if c["slot"] == "hair" else f"anny_cl_{of['tops_color' if c['slot'] == 'top' else 'bottom_color']}")
+        used.add(c["mat"])
     mats = define_materials(st, f"{P}/Materials", only=used, texdir="../textures")
     # スケルトン
     names = list(m.bone_labels)
@@ -142,14 +140,15 @@ def write_hero(spec, path=None, outfit=None, anim=True):
     for c in b["cloth"]:
         Vc = H.to_world(c["Vrest"], ground=g)
         faces = [[vi for vi, _ in f] for f in c["cl"]["faces"]]
-        hair = c["slot"] == "hair"
-        mat = f"anny_hair_{of['hair']}_{of['hair_color']}" if hair else f"anny_cl_{of['tops_color' if c['slot'] == 'top' else 'bottom_color']}"
+        hair = c["uv"]
+        mat = c["mat"]
         vt = c["cl"]["vt"]
         uvi = [[t for _, t in f] for f in c["cl"]["faces"]] if hair else None
         # 三角形/四角形の頂点法線
         tri = [f if len(f) == 3 else f[:3] for f in faces]
         nc = H._vnormals(Vc, np.array(tri))
-        gm = _mesh(st, f"{P}/{c['slot'].capitalize()}", Vc, faces, [mat] * len(faces), mats, vt if hair else None, uvi, nc, hair=hair)
+        pn = re.sub(r"\W", "_", c["name"])[:16]
+        gm = _mesh(st, f"{P}/{c['slot'].capitalize()}_{pn}", Vc, faces, [mat] * len(faces), mats, vt if hair else None, uvi, nc, hair=hair)
         idx, w = _top6(c["cw"])
         ac = _skin_attrs(gm.GetPrim(), idx, w, len(Vc))
         ac.CreateSkeletonRel().SetTargets([Sdf.Path(f"{P}/Skel")])

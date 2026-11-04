@@ -10,18 +10,28 @@ from vt.modules import lib_anny
 from vt.modules.library import REG, get
 
 ROOT = Path(__file__).resolve().parents[1]
-HERO = dict(office=4, casual=6, elder=3, student=3, kid=3, heavy=1)
+HERO = dict(office=4, casual=6, elder=3, student=4, kid=3, heavy=1, worker=3)
 
+from vt import humans_motion as HM
 print("hair textures:", len(H.make_hair_textures()))
+if "--no-anim" not in sys.argv:
+    clips = HM.make_all() if HM.MOCAP.exists() else {}
+    if clips:
+        HM.save(clips)
+    for n in HM.names():
+        HM.write_usd(n)
+    print("clips:", HM.names())
 
 used, rows = {}, []
 for g, n in lib_anny.GROUPS.items():
     for k in range(n):
         spec = lib_anny.spec_of(g, k)
-        b = H.build(spec, topology=lib_anny.LOD, posename=lib_anny.pose_of(k)[0])
+        b = H.build(spec, topology=lib_anny.LOD, posename="idle")
         rows.append((spec["id"], spec["group"], spec["years"], "F" if spec["female"] else "M", round(b["rest"][:, 2].max() * 100 - b["rest"][:, 2].min() * 100, 1)))
         for c in b["cloth"]:
             cl = c["cl"]
+            if cl["license"] == "procedural":
+                continue
             assert cl["license"] in ("CC0", "CC BY 4.0"), (cl["path"], cl["license"])
             used[cl["path"]] = (cl["name"], cl["author"] if cl["author"] != "?" else Path(cl["path"]).parent.name.split("_")[0].capitalize(), cl["license"])
 
@@ -38,7 +48,7 @@ if "--no-heroes" not in sys.argv:
         for k in range(n):
             spec = lib_anny.spec_of(g, k)
             p = U.write_hero(spec)
-            for pose in ("stand", "walk"):
+            for pose in ("idle", "walk"):
                 U.write_baked(g, k, pose)
             print("hero", spec["id"], f"{p.stat().st_size / 1e6:.1f}MB")
 

@@ -1,8 +1,8 @@
 """Anny(Apache-2.0、同梱の MakeHuman 由来データは CC0)による人物生成。SMPL-X 互換トポロジ(非商用)は使わない。"""
-import colorsys
 import math
 import os
 import random
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -18,8 +18,21 @@ PROFILES = {
     "elder":   dict(p_f=0.55, age=(66, 88), h=((165, 6.0), (151, 5.5)), w=(0.46, 0.12), mu=(0.38, 0.10)),
     "student": dict(p_f=0.50, age=(15, 18), h=((169, 5.7), (157, 5.2)), w=(0.40, 0.09), mu=(0.42, 0.10)),
     "kid":     dict(p_f=0.50, age=(5, 12), h=None, w=(0.45, 0.08), mu=(0.40, 0.06)),
+    "worker":  dict(p_f=0.12, age=(22, 62), h=((171, 5.8), (158, 5.4)), w=(0.50, 0.12), mu=(0.55, 0.10)),
     "heavy":   dict(p_f=0.40, age=(30, 65), h=((170, 6.0), (157, 5.5)), w=(0.72, 0.08), mu=(0.50, 0.10)),
 }
+
+
+FACE_LABELS = None
+
+
+def _face_labels():
+    """顔まわりの local_changes ラベル(頬・顎・耳・目・鼻・口・額・眉)。腕・胸・臀部は体型パラメータ側で扱う"""
+    global FACE_LABELS
+    if FACE_LABELS is None:
+        keys = ("cheek", "chin", "ear", "eye", "nose", "mouth", "lip", "forehead", "eyebrow", "jaw", "head")
+        FACE_LABELS = [l for l in model("anny").local_change_labels if any(k in l for k in keys) and "measure" not in l]
+    return FACE_LABELS
 
 
 def age_param(years):
@@ -42,7 +55,7 @@ def model(topology="anny"):
         import anny
         import torch
         torch.set_num_threads(max(1, min(4, os.cpu_count() or 1)))
-        _MODELS[topology] = anny.Anny(rig="game_engine", topology=topology, phenotypes="all", local_changes="none")
+        _MODELS[topology] = anny.Anny(rig="game_engine", topology=topology, phenotypes="all", local_changes="default", facial_actions="all")
     return _MODELS[topology]
 
 
@@ -51,13 +64,13 @@ def _kw(p):
     return {k: torch.tensor([float(v)]) for k, v in p.items()}
 
 
-def run(p, topology="anny", pose=None):
+def run(p, topology="anny", pose=None, local=None, expr=None):
     """phenotype 辞書 p と姿勢(1,B,4,4。None=レスト)から rest/posed 頂点とボーン行列(numpy)を返す"""
     import torch
     m = model(topology)
     P = torch.eye(4)[None, None].expand(1, m.bone_count, 4, 4).clone() if pose is None else pose
     with torch.no_grad():
-        o = m(pose_parameters=P, phenotype_kwargs=_kw(p))
+        o = m(pose_parameters=P, phenotype_kwargs=_kw(p), local_changes_kwargs=_kw(local) if local else None, facial_actions=_kw(expr) if expr else None)
     return {k: o[k][0].double().numpy() for k in ("rest_vertices", "vertices", "rest_bone_poses", "bone_poses")}
 
 
@@ -76,7 +89,7 @@ def solve_height(p, cm, topology="anny"):
 
 def sample(seed, group="casual", female=None):
     """体格サンプル。戻り値: dict(id, group, female, years, cm, p=phenotype)"""
-    rng = random.Random(seed * 7919 + hash(group) % 1000)
+    rng = random.Random(seed * 7919 + zlib.crc32(group.encode()) % 1000)
     pr = PROFILES[group]
     f = (rng.random() < pr["p_f"]) if female is None else female
     years = rng.uniform(*pr["age"])
@@ -92,7 +105,16 @@ def sample(seed, group="casual", female=None):
         p["height"] = solve_height(p, cm)
     else:
         p["height"] = float(np.clip(rng.gauss(0.5, 0.07), 0.35, 0.65))
-    return dict(id=f"{group}_{seed:03d}", group=group, seed=seed, female=bool(f), years=round(years, 1), cm=cm, p=p)
+    p["asian"] = float(np.clip(rng.gauss(0.92, 0.07), 0.6, 1.0))
+    p["caucasian"] = float(np.clip(rng.gauss(0.05, 0.05), 0.0, 0.3))
+    p["african"] = float(np.clip(rng.gauss(0.02, 0.03), 0.0, 0.15))
+    labs = [k for k in _face_labels() if rng.random() < 0.12]
+    local = {k: round(rng.uniform(0.0, 0.7), 2) for k in labs}
+    expr = {}
+    if rng.random() < 0.5:
+        sm = round(rng.uniform(0.1, 0.45), 2)
+        expr = {"mouthSmileLeft": sm, "mouthSmileRight": sm}
+    return dict(id=f"{group}_{seed:03d}", group=group, seed=seed, female=bool(f), years=round(years, 1), cm=cm, p=p, local=local, expr=expr)
 
 
 # ---- 姿勢(world軸まわりの回転。実測: local-ref はレスト向き=ワールド軸) ----
@@ -240,6 +262,9 @@ def load_mhclo(path):
     off = R[:, 6:9]
     sc = []
     for k, key in enumerate(("x_scale", "y_scale", "z_scale")):
+        if key not in hdr:
+            sc.append(1.0)
+            continue
         a, b, s = hdr[key]
         sc.append(abs(B[a, k] - B[b, k]) / s)
     p = (B[i] * w[:, :, None]).sum(1) + off * np.array(sc)
@@ -321,9 +346,11 @@ def fit_cloth(cloth, V, topology, margin=0.006):
 
     def push():
         nonlocal C
-        _, j = kd.query(C)
-        sd = ((C - V[j]) * nrm[j]).sum(1)
-        C = C + nrm[j] * np.maximum(0.0, margin - sd)[:, None]
+        _, j = kd.query(C, k=4)
+        sd = ((C[:, None, :] - V[j]) * nrm[j]).sum(2)
+        w = np.argmin(sd, axis=1)
+        jj = j[np.arange(len(C)), w]
+        C = C + nrm[jj] * np.maximum(0.0, margin - sd[np.arange(len(C)), w])[:, None]
     push()
     E = cloth["adj"]
     cnt = np.bincount(E[:, 0], minlength=len(C)).astype(float)
@@ -362,57 +389,50 @@ SKIN = ["#e7c3a3", "#dfb694", "#d8aa84", "#e9cdb2", "#cfa27b", "#eacbb0"]
 
 
 def outfit(spec, rng):
-    """人物 spec に服・髪・色を割り当てる(group で傾向を変える)"""
+    """人物 spec の服装・髪・肌色・靴色。服は humans_wear.make_outfit(pieces)"""
+    from . import humans_wear as W
     f = spec["female"]
-    g = spec["group"]
-    s = "f" if f else "m"
-    o = dict(top=rng.choice(TOPS[s]), bottom=rng.choice(BOTTOMS[:3] if not f else BOTTOMS), hair=rng.choice(HAIRS[s]), shoes=rng.choice(SHOES[1:] if f else SHOES[:1]))
-    if g == "office":
-        o["tops_color"] = rng.choice(["white", "white", "gray", "blue", "navy"])
-        o["bottom_color"] = rng.choice(["black", "navy", "gray"])
-    elif g == "student":
-        o["tops_color"] = rng.choice(["white", "white", "blue"])
-        o["bottom_color"] = rng.choice(["navy", "navy", "gray"])
-    else:
-        o["tops_color"] = rng.choice(list(COLORS))
-        o["bottom_color"] = rng.choice(["navy", "black", "gray", "beige", "olive", "blue"])
+    o = dict(pieces=W.make_outfit(spec, rng), hair=rng.choice(HAIRS["f" if f else "m"]))
     if spec["years"] > 60:
         o["hair_color"] = rng.choice(["gray", "gray", "white", "black"])
     else:
         o["hair_color"] = rng.choice(["black"] * 6 + ["dark", "brown", "chestnut"])
     o["skin"] = rng.randrange(len(SKIN))
-    o["shoe_color"] = rng.choice(["black", "white", "navy", "gray"])
+    o["shoe_color"] = rng.choice(["black", "white", "navy", "gray", "brown"])
+    hat = any(p[1] in ("hat", "helmet") for p in o["pieces"])
+    o["hat"] = hat
     return o
 
 
 def build(spec, outfit_d=None, topology="anny", posename="stand", phase=0.0):
-    """人物1体を組む。戻り dict(rest=体レスト頂点, v=ポーズ後頂点, faces, bones_rest, bones_pose, parts[list], cloth=[dict(name,V(posed),Vrest,faces,uv,mat,cw)])"""
+    """人物1体を組む。戻り dict(rest, v, faces, bones_rest, bones_pose, W, parts, full, cloth=[dict(slot,name,V,Vrest,cw,cl,mat,uv)])"""
+    from . import humans_wear as WR
     rng = random.Random(spec["seed"] * 31 + 5)
     of = outfit_d or outfit(spec, rng)
     m = model(topology)
-    P = pose(posename, phase, random.Random(spec["seed"]))
-    r = run(spec["p"], topology, P)
+    from . import humans_motion as HM
+    P = HM.pose_at(posename, phase) if (HM.ANIM / f"{posename}.npz").exists() else pose(posename, phase, random.Random(spec["seed"]))
+    r = run(spec["p"], topology, P, spec.get("local"), spec.get("expr"))
     bi, bw = m.vertex_bone_indices.numpy(), m.vertex_bone_weights.numpy()
     Wd = np.zeros((len(r["rest_vertices"]), m.bone_count))
     np.put_along_axis(Wd, bi, bw, axis=1)
     out = dict(spec=spec, outfit=of, topology=topology, rest=r["rest_vertices"], v=r["vertices"], faces=m.faces.numpy(), bones_rest=r["rest_bone_poses"], bones_pose=r["bone_poses"], W=Wd, cloth=[])
-    rf = r if topology == "anny" else run(spec["p"], "anny", P)
+    rf = r if topology == "anny" else run(spec["p"], "anny", P, spec.get("local"), spec.get("expr"))
     mf = model("anny")
     global _PARTS
     if _PARTS is None:
         _PARTS = face_parts(mf)
     out["parts"] = _PARTS if topology == "anny" else None
-    out["full"] = dict(v=rf["vertices"], faces=mf.faces.numpy(), parts=_PARTS, nrm=_vnormals(rf["vertices"], mf.faces.numpy()))
-    for slot, pack, sub, key in (("bottom", "pants01", "clothes", "bottom"), ("top", "shirts01", "clothes", "top"), ("hair", "hair01", "hair", "hair")):
-        nm = of[key]
-        p = _find(pack, sub, nm)
-        if not p.exists():
-            continue
-        cl = load_mhclo(p)
-        Vr = fit_cloth(cl, rf["rest_vertices"], "anny", margin=dict(top=0.013, bottom=0.007, hair=0.004).get(slot, 0.006))
+    out["full"] = dict(v=rf["vertices"], rest=rf["rest_vertices"], faces=mf.faces.numpy(), parts=_PARTS, nrm=_vnormals(rf["vertices"], mf.faces.numpy()))
+    out["cloth"] = WR.build_pieces(rf, of["pieces"], r, topology)
+    for pc in out["cloth"]:
+        pc["mat"] = f"anny_cl_{pc['mat']}"
+    if not of.get("hat"):
+        nm = of["hair"]
+        cl = load_mhclo(_find("hair01", "hair", nm))
+        Vr = fit_cloth(cl, rf["rest_vertices"], "anny", margin=0.004)
         cw = bind(cl, "anny")["cw"]
-        Vp = skin(Vr, rf["rest_bone_poses"], rf["bone_poses"], cw)
-        out["cloth"].append(dict(slot=slot, name=nm, Vrest=Vr, V=Vp, cw=cw, cl=cl))
+        out["cloth"].append(dict(slot="hair", name=nm, Vrest=Vr, V=skin(Vr, rf["rest_bone_poses"], rf["bone_poses"], cw), cw=cw, cl=cl, mat=f"anny_hair_{nm}_{of['hair_color']}", uv=True))
     return out
 
 
@@ -444,3 +464,27 @@ def make_hair_textures(size=1024):
         Image.fromarray(np.dstack([g, g, g, a[..., 3].astype(np.uint8)]), "RGBA").save(TEXDIR / f"anny_hair_{st}.png", optimize=True)
         out.append(st)
     return out
+
+
+def decimate(V, faces, cell=0.012):
+    """頂点クラスタリングによる簡易間引き(cell[m] の格子ごとに頂点を平均)。faces は頂点番号のリスト(多角形可)。戻り: (V2, tris)"""
+    V = np.asarray(V)
+    key = np.floor(V / cell).astype(np.int64)
+    _, inv = np.unique(key, axis=0, return_inverse=True)
+    inv = inv.reshape(-1)
+    n = inv.max() + 1
+    cnt = np.bincount(inv, minlength=n)[:, None]
+    V2 = np.zeros((n, 3))
+    for k in range(3):
+        V2[:, k] = np.bincount(inv, weights=V[:, k], minlength=n)
+    V2 /= cnt
+    seen, tris = set(), []
+    for f in faces:
+        for i in range(1, len(f) - 1):
+            t = (inv[f[0]], inv[f[i]], inv[f[i + 1]])
+            if len(set(t)) == 3:
+                k = tuple(sorted(t))
+                if k not in seen:
+                    seen.add(k)
+                    tris.append(t)
+    return V2, tris

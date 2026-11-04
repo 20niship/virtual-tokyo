@@ -13,7 +13,7 @@ opt = lambda k, d: type(d)(sys.argv[sys.argv.index(k) + 1]) if k in sys.argv els
 out = args[0]
 grp, n, cols = opt("--group", "all"), opt("--n", 20), opt("--cols", 10)
 sel = grp.split(",")
-names = [x for g, v in NAMES.items() if "all" in sel or g in sel for x in v][:n]
+names = [x for g, v in NAMES.items() if "all" in sel or g in sel for x in v][::opt("--stride", 1)][opt("--start", 0):][:n]
 if "--pedx" in sys.argv:
     from vt.modules.lib_city2 import PEDX
     names = [x for v in PEDX.values() for x in v][:n]
@@ -30,7 +30,7 @@ for i, nm in enumerate(names):
         o.rotation_euler = (0, 0, 3.14159)
     bpy.context.scene.collection.objects.link(o)
 if "--zoom" in sys.argv:
-    render.add_camera((0, opt("--cam", 2.2), 1.55), (0, 0, 1.2), 40)
+    render.add_camera((0, opt("--cam", 2.2), opt("--camz", 1.55)), (0, 0, opt("--tz", 1.2)), 40)
 else:
     render.add_camera((0, 2.0 + W * 0.62 + rows * 0.6, 2.2 + rows * 0.5), (0, -(rows - 1) * 0.9, 0.85), 38)
 sc = bpy.context.scene

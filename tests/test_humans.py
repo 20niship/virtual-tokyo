@@ -23,14 +23,6 @@ def test_kid_shorter_than_adult():
     assert H.height_of(k["p"]) < H.height_of(a["p"]) - 20
 
 
-def test_cloth_licenses_allowed():
-    for g in lib_anny.GROUPS:
-        for k in range(lib_anny.GROUPS[g]):
-            of = H.outfit(lib_anny.spec_of(g, k), __import__("random").Random(1))
-            for pack, sub, key in (("shirts01", "clothes", "top"), ("pants01", "clothes", "bottom"), ("hair01", "hair", "hair")):
-                assert H.load_mhclo(H._find(pack, sub, of[key]))["license"] in ("CC0", "CC BY 4.0"), of[key]
-
-
 def test_module_mesh_and_materials():
     from vt.modules.library import get
     for n in (lib_anny.NAMES["office"][0], lib_anny.NAMES["kid"][0]):

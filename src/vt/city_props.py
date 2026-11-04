@@ -25,16 +25,19 @@ HUMANS = "pedx"     # "anny": Anny 由来の人物(modules/lib_anny.py)を使う
 ANNY_G = dict(office="office", woman="casual", casual="casual", phone="casual", elder="elder", parasol="casual", student="student", kid="kid")
 
 
-def _ped(rng, rank=2):
+def _ped(rng, rank=2, role=None):
     """歩行者モジュール名: 道路の格に応じて属性(会社員/女性/私服/スマホ/高齢者/日傘/学生/子供)の比率を変える"""
     wt = PED_W[3 if rank >= 3 else rank]
     g = rng.choices(list(wt), weights=list(wt.values()))[0]
     if HUMANS == "anny":
-        from .modules.lib_anny import NAMES
+        from .modules import lib_anny as A
         ag = ANNY_G[g]
-        if ag == "casual" and rng.random() < 0.08:
-            ag = "heavy"
-        return rng.choice(NAMES[ag])
+        if ag == "casual":
+            r = rng.random()
+            ag = "heavy" if r < 0.06 else "worker" if r < 0.14 else "casual"
+        want = dict(walk=A.WALK, wait=A.WAIT, park=A.PARK).get(role)
+        c = [n for n in A.NAMES[ag] if want is None or A.clip_of(n) in want]
+        return rng.choice(c or A.NAMES[ag])
     from .modules.lib_city2 import PEDX
     return rng.choice(PEDX[g])
 
@@ -133,10 +136,10 @@ def pedestrians(w, rng):
                     cx, cy = x - ty * t, y + tx * t
                     if sw.contains(Point(cx, cy)):
                         walk = rng.random() < 0.6
-                        nm = _ped(rng, rank)
+                        nm = _ped(rng, rank, "walk" if walk else "wait")
                         out.append(Inst(nm, cx, cy, T(cx, cy) + 0.14, math.atan2(ty, tx) - math.pi / 2 + (0 if rng.random() < 0.5 else math.pi)))
                         if rng.random() < 0.3:      # 連れ(2人組)
-                            out.append(Inst(_ped(rng, rank), cx + tx * 0.7, cy + ty * 0.7, T(cx, cy) + 0.14, out[-1].rot))
+                            out.append(Inst(_ped(rng, rank, "walk" if walk else "wait"), cx + tx * 0.7, cy + ty * 0.7, T(cx, cy) + 0.14, out[-1].rot))
                         if rng.random() < 0.06:     # 自転車
                             out.append(Inst(rng.choice(["cyclist_commuter", "cyclist_student", "cyclist_mama", "scooter_rider_0", "scooter_rider_1"]), cx + tx * 1.5, cy + ty * 1.5, T(cx, cy) + 0.14, math.atan2(ty, tx) + (0 if rng.random() < 0.5 else math.pi)))
                     s += gap * rng.uniform(0.4, 1.8)
@@ -145,7 +148,7 @@ def pedestrians(w, rng):
             while s < e.line.length - 2:
                 x, y, tx, ty = _frame(e.line, s)
                 cx, cy = x - ty * rng.uniform(-0.8, 0.8), y + tx * rng.uniform(-0.8, 0.8)
-                out.append(Inst(_ped(rng, 1), cx, cy, T(cx, cy) + 0.04, math.atan2(ty, tx) - math.pi / 2 + (0 if rng.random() < 0.5 else math.pi)))
+                out.append(Inst(_ped(rng, 1, "walk"), cx, cy, T(cx, cy) + 0.04, math.atan2(ty, tx) - math.pi / 2 + (0 if rng.random() < 0.5 else math.pi)))
                 s += rng.uniform(15, 60)
     # 横断歩道の待ち
     for a in w["info"]["arms"]:
@@ -155,7 +158,7 @@ def pedestrians(w, rng):
                 if rng.random() < 0.6:
                     cx, cy = px + nlx * sgn * (e.prof.half + 1.2) + tx * rng.uniform(-1.5, 1.5), py + nly * sgn * (e.prof.half + 1.2)
                     if sw.buffer(1).contains(Point(cx, cy)):
-                        out.append(Inst(_ped(rng, 3), cx, cy, T(cx, cy) + 0.14, math.atan2(-nly * sgn, -nlx * sgn) - math.pi / 2))
+                        out.append(Inst(_ped(rng, 3, "wait"), cx, cy, T(cx, cy) + 0.14, math.atan2(-nly * sgn, -nlx * sgn) - math.pi / 2))
     # 公園・緑地: 散策する人
     for f in w["L"]["green"]:
         if f.geom.area > 1200 and w["area"].contains(f.geom.centroid):
@@ -170,7 +173,7 @@ def pedestrians(w, rng):
                             pt = q
                             break
                 if pt is not None:
-                    out.append(Inst(_ped(rng, 0), pt.x, pt.y, T(pt.x, pt.y) + 0.06, rng.uniform(0, 6.28)))
+                    out.append(Inst(_ped(rng, 0, "park"), pt.x, pt.y, T(pt.x, pt.y) + 0.06, rng.uniform(0, 6.28)))
     return out
 
 
