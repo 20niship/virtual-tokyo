@@ -24,11 +24,11 @@ def _look(x, y, dx, dy, z, dist=20.0, dz=0.0):
     return (x + dx / n * dist, y + dy / n * dist, z + dz)
 
 
-def pick_ground_views(w, seed=5, per=2):
+def pick_ground_views(w, seed=5, per=2, margin=150):
     """歩道/車道/交差点/公園/広場/水辺/高架下/駐車場/路地/建物裏/駅前 から自動選定"""
     rng = random.Random(seed)
     T, area, edges, info = w["T"], w["area"], w["edges"], w["info"]
-    inner = area.buffer(-150)
+    inner = area.buffer(-margin)
     views = []
 
     from shapely.strtree import STRtree
@@ -75,7 +75,8 @@ def pick_ground_views(w, seed=5, per=2):
         px, py, tx, ty = a[6][0], a[6][1], a[6][2], a[6][3]
         add("intersection", px + tx * 22, py + ty * 22, -tx, -ty, 0, 24)
     # 公園/広場/駐車場
-    for f in rng.sample([f for f in w["L"]["green"] if f.geom.area > 1500 and inner.contains(f.geom.centroid)], min(per, 4)) if w["L"]["green"] else []:
+    greens = [f for f in w["L"]["green"] if f.geom.area > 1500 and inner.contains(f.geom.centroid)]
+    for f in rng.sample(greens, min(per, 4, len(greens))):
         c = f.geom.representative_point()
         add("park", c.x, c.y, rng.uniform(-1, 1), rng.uniform(-1, 1))
     park = [f for f in w["L"].get("landuse", []) if f.tags.get("amenity") == "parking" and f.geom.area > 800 and inner.contains(f.geom.centroid)]

@@ -344,6 +344,12 @@ def _specials(B, poly, z0, z_top, S, rng, n_f):
         elif sp == "torii_small":
             x, y, r = at(long_, 0.5, 8.0)
             _put(B, "torii_small", x, y, z0, r)
+        elif sp == "apt_stair_side" and n_f >= 2 and math.dist(*short) > 2.0:
+            x, y, r = at(short, 0.5)
+            _put(B, "apt_stair_side", x, y, z0, r, 1.0, 1.0, (z_top - z0) / 6.2)
+        elif sp.startswith("sp_") and sp in REG and rng.random() < 0.8:
+            x, y, r = at(long_, rng.uniform(0.15, 0.85), 3.5)
+            _put(B, sp, x, y, z0, r)
 
 
 def _pitched_roof(B, poly, z, rng, kind=None, mat="roof_tile", wall_mat="spray_main"):
@@ -487,7 +493,7 @@ def build_building(feat, seed=0, style=None):
     rect = r.geom_type == "Polygon" and poly.area / r.area > 0.85
     rc = list(r.exterior.coords)[:4] if r.geom_type == "Polygon" else []
     long_side = max((math.dist(rc[i], rc[i + 1]) for i in range(3)), default=0.0) if rc else 0.0
-    style_name = style or pick_style(t, poly.area, n, rng, rect, long_side)
+    style_name = style or t.get("_style") or pick_style(t, poly.area, n, rng, rect, long_side)
     if style_name == "house" and not rect:
         style_name = "zakkyo"
     S = STYLES[style_name]
@@ -519,9 +525,17 @@ def build_building(feat, seed=0, style=None):
         _specials(B, upper_poly, zt, z2, S_up, rng, upper_n)
         _specials(B, poly, z0, zt, {k: v for k, v in S.items() if k != "special"} | {"special": [s for s in S.get("special", []) if s in ("glass_elevator_shaft", "escalator_tube", "mall_sign_tower", "stair_ext_zigzag", "torii_small")]}, rng, len(low))
     else:
-        done = S.get("pitched") and _pitched_roof(B, poly, zt, rng, "gable" if style_name == "shrine" else None, "roof_tile" if rng.random() < 0.75 else "roof_metal")
+        if S.get("pitched") and S.get("roofs"):
+            from . import roofs
+            R = S["roofs"]
+            done = roofs.build(B, poly, zt, rng, rng.choice(R["kinds"]), rng.choice(R["mats"]), S.get("wall_mat", "spray_main"))
+        else:
+            done = S.get("pitched") and _pitched_roof(B, poly, zt, rng, "gable" if style_name == "shrine" else None, "roof_tile" if rng.random() < 0.75 else "roof_metal")
         if not done:
             _cap(B.shell, poly.buffer(-0.2, join_style=2), zt, "roof_membrane")
             _roof_props(B, poly, zt, S, rng, n, zt, False)
         _specials(B, poly, z0, zt, S, rng, n)
     return B
+
+
+from . import styles_extra  # noqa: E402,F401  (田舎/ロードサイド/工場の様式を登録)
