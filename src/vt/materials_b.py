@@ -42,7 +42,9 @@ MATERIALS.update({
 for _n, _r in (("leaf_litter_1", 0.8), ("leaf_litter_2", 0.8), ("puddle", 0.03), ("oil", 0.25), ("tire_marks", 0.7), ("trench", 0.8),
                ("cover_round_sewer", 0.5), ("cover_square_water", 0.5), ("cover_round_water", 0.5), ("cover_gas", 0.5), ("cover_hand", 0.5)):
     MATERIALS["decal_overlay_" + _n] = dict(color="#ffffff", rough=_r, metal=0.0, tex=f"overlay_{_n}.png", size=None, alpha=True, wear=None)
-MATERIALS.update({"curb_chip": M("#6a6a66", 0.95, bump=0.8), "curb_chip_dark": M("#2a2a28", 0.95), "crack_dark": M("#1a1a1a", 0.9), "gutter_leaf": M("#6a5030", 0.9)})
+MATERIALS.update({"curb_top": dict(color="#808080", rough=0.82, metal=0.0, tex="concrete.png", size=4.0, bump=0.5, tint="#d2d0c8"),          # 縁石天端(明るく、角が擦れて白い)
+                  "gutter_l": dict(color="#808080", rough=0.9, metal=0.0, tex="concrete.png", size=4.0, bump=0.5, tint="#8f8e8a"),         # L型側溝(やや暗く汚れる)
+                  "curb_chip": M("#6a6a66", 0.95, bump=0.8), "curb_chip_dark": M("#2a2a28", 0.95), "crack_dark": M("#1a1a1a", 0.9), "gutter_leaf": M("#6a5030", 0.9)})
 
 # ---- 街の生活感 ----
 MATERIALS.update({
