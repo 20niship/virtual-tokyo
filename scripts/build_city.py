@@ -36,7 +36,14 @@ ap.add_argument("--region", default="odaiba", choices=["odaiba", "west"], help="
 ap.add_argument("--spot", default="", help="地点プリセット名(小領域 half=200)。" + ",".join(SPOTS))
 ap.add_argument("--center", default="", help="lon,lat(--half と併用)")
 ap.add_argument("--round", default="1", help="out/render/spots/<spot>/round<N>/ に保存")
+ap.add_argument("--look", default="photoreal", choices=["photoreal", "legacy"], help="photoreal=実写寄り(フルサイズ換算の焦点距離/DoF/ビネット/粒子等) / legacy=従来")
+ap.add_argument("--lens", type=float, default=0, help="焦点距離[mm](フルサイズ換算)。0=自動(地上28/35, 俯瞰60)")
+ap.add_argument("--fstop", type=float, default=5.6, help="絞り値(地上。俯瞰はF8以上)")
+ap.add_argument("--no-dof", action="store_true", help="被写界深度を無効化")
 a = ap.parse_args()
+from vt import render as _r
+_r.PHOTO, _r.FSTOP, _r.DOF = a.look == "photoreal", a.fstop, not a.no_dof
+city_render.LENS = a.lens
 if a.humans != "pedx":
     from vt import city_props as _cp
     _cp.HUMANS = a.humans
@@ -91,7 +98,7 @@ if a.render:
     av = city_render.pick_aerial_views(w)
     if tag:     # 小領域: 地点の主題に合う地面視点3〜4枚+空中2枚
         pri = PRIORITY.get(a.spot, ["intersection", "roadway", "sidewalk", "alley", "park", "plaza"])
-        gv = sorted(gv, key=lambda v: (pri.index(v.kind) if v.kind in pri else 99, v.name))[:4]
+        gv = sorted(gv, key=lambda v: (pri.index(v.kind) if v.kind in pri else 99, v.name))[:4 if not a.only else 99]
         av = [v for v in av if v.name in ("a_oblique_0", "a_oblique_2")]
     views = gv + av
     if a.only:
