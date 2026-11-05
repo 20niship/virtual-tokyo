@@ -385,7 +385,7 @@ SHOES = ["toigo_ankle_boots_male", "toigo_ballet_flats_with_bows"]
 
 COLORS = dict(white="#e8e8e4", black="#222428", navy="#24334f", gray="#7d8084", beige="#c8b898", red="#a83a3a", olive="#6a6a3a", blue="#3e6aa0", pink="#d89aa8", mustard="#c8a030")
 HAIRC = dict(black="#181412", dark="#2a1c14", brown="#4a3020", gray="#a8a8a4", white="#d8d8d4", chestnut="#5a3a24")
-SKIN = ["#e7c3a3", "#dfb694", "#d8aa84", "#e9cdb2", "#cfa27b", "#eacbb0"]
+SKIN = ["#dcae8c", "#d4a27e", "#cb9a74", "#e2b896", "#c08c68", "#e0b090"]
 
 
 def outfit(spec, rng):
@@ -408,6 +408,14 @@ def outfit(spec, rng):
     o["lace"] = "white" if o["shoe_color"] in ("black", "navy", "red", "brown", "olive", "gray") and rng.random() < 0.7 else "black"
     hat = any(p[1] in ("hat", "helmet") for p in o["pieces"])
     o["hat"] = hat
+    if f:
+        o["hair_kind"] = rng.choices(["card", "pony"], [78, 22])[0]
+    else:
+        bald = 0.04 + max(0.0, (yr - 40) * 0.012)
+        o["hair_kind"] = rng.choices(["card", "buzz", "bald"], [0.62 - bald * 0.5, 0.16, bald])[0] if yr > 14 else "card"
+    o["beard"] = None
+    if not f and yr > 22:
+        o["beard"] = rng.choices([None, "stubble", "beard", "mustache"], [78, 12, 6, 4])[0]
     return o
 
 
@@ -437,7 +445,13 @@ def build(spec, outfit_d=None, topology="anny", posename="stand", phase=0.0, cac
     out["cloth"] = WR.build_pieces(rf, of["pieces"], r, topology)
     for pc in out["cloth"]:
         pc["mat"] = f"anny_cl_{pc['mat']}"
-    if not of.get("hat"):
+    out["cloth"] += WR.decals(rf, out["cloth"], random.Random(spec["seed"] * 17 + 3), spec["group"], spec["years"])
+    hk = of.get("hair_kind", "card")
+    if not of.get("hat") and hk in ("buzz", "pony"):
+        out["cloth"] += WR.hair_piece(rf, hk, of["hair_color"])
+    if of.get("beard"):
+        out["cloth"] += WR.beard_piece(rf, of["beard"], of["hair_color"])
+    if not of.get("hat") and hk == "card":
         nm = of["hair"]
         cl = load_mhclo(_find("hair01", "hair", nm))
         Vr = fit_cloth(cl, rf["rest_vertices"], "anny", margin=0.004)

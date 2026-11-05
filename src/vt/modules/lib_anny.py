@@ -122,29 +122,36 @@ def _push_out(H, b, g, V, margin=0.009):
     return V
 
 
-def _ellipse(m, H, g, c, t, u, a, bb, mat, n=12):
-    """面上の楕円デカール(扇形。法線 t×u 向き)。c,t,u は Anny 座標"""
-    import math
-
+def _quad(m, H, g, c, t, u, w, h, uv, mat, flip=False):
+    """面上のテクスチャ付き四角形デカール(c=中心、t=右、u=上、Anny 座標)。uv=(u0,v0,u1,v1)"""
     import numpy as np
-    ring = [c + t * a * math.cos(2 * math.pi * k / n) + u * bb * math.sin(2 * math.pi * k / n) for k in range(n)]
-    P = H.to_world(np.array([c] + ring), ground=g)
+    u0, v0, u1, v1 = uv
+    if flip:
+        u0, u1 = u1, u0
+    P = np.array([c - t * w / 2 + u * h / 2, c + t * w / 2 + u * h / 2, c + t * w / 2 - u * h / 2, c - t * w / 2 - u * h / 2])
+    UV = [(u0, v1), (u1, v1), (u1, v0), (u0, v0)]
+    W = H.to_world(P, ground=g)
     o = len(m.v)
-    m.v.extend(map(tuple, P.tolist()))
+    m.v.extend(map(tuple, W.tolist()))
     nrm = np.cross(t, u)
     nw = np.array([-nrm[0], -nrm[1], nrm[2]])
-    for k in range(n):
-        tri = (o, o + 1 + k, o + 1 + (k + 1) % n)
-        e = np.cross(P[tri[1] - o] - P[0], P[tri[2] - o] - P[0])
-        if e @ nw < 0:
-            tri = (tri[0], tri[2], tri[1])
-        m.f.append(tri); m.m.append(mat); m.uv.append(None)
+    for tri in ((0, 1, 2), (0, 2, 3)):
+        e = np.cross(W[tri[1]] - W[tri[0]], W[tri[2]] - W[tri[0]])
+        idx = tri if e @ nw >= 0 else (tri[0], tri[2], tri[1])
+        m.f.append(tuple(o + i for i in idx)); m.m.append(mat); m.uv.append([UV[i] for i in idx])
 
 
 def _face_decals(m, H, b, g, of):
-    """低ポリ頭部に目(白目+黒目+まぶた線)・眉・口をデカールで足す。穴にならないよう表面に貼る"""
+    """低ポリ頭部に顔のデカールを貼る: 目(虹彩・白目・ハイライト・まつげ)・眉・唇(笑顔で歯)・血色・くま・そばかす・ほくろ・しわ。年齢・性別・髪色に連動"""
+    import random
+
     import numpy as np
     from scipy.spatial import cKDTree
+
+    from .. import textures_human as TH
+    spec = b["spec"]
+    rng = random.Random(spec["seed"] * 101 + 7)
+    yr, fem = spec["years"], spec["female"]
     F, parts, Vf = b["full"]["faces"], b["full"]["parts"], b["full"]["v"]
     nrm_l = H._vnormals(b["v"], b["faces"])
     Vl = b["v"]
@@ -161,22 +168,51 @@ def _face_decals(m, H, b, g, of):
         p = c - n * ((c - Vl[j]) @ n)
         t = np.cross(up, n)
         t /= max(np.linalg.norm(t), 1e-9)
-        u = np.cross(n, t)
-        return p, n, t, u
+        return p, n, t, np.cross(n, t)
+    k = [0]
+
+    def put(p, n, t, u, off_t, off_u, w, h, uv, mat, flip=False):
+        k[0] += 1
+        c = p + t * off_t + u * off_u + n * (0.0011 + 0.00018 * k[0])
+        _quad(m, H, g, c, t, u, w, h, uv, mat, flip)
+    eye = rng.randrange(4) if rng.random() < 0.15 else rng.choice([0, 1, 1])
+    brow = rng.randrange(4)
+    hc = of["hair_color"] if of["hair_color"] in ("black", "dark", "brown", "chestnut", "gray", "white", "blond", "auburn") else "dark"
+    pts = {}
     for sd in ("L", "R"):
         c = centroid(lambda p, sd=sd: p == f"eye_front.{sd}")
         if c is None:
             continue
         p, n, t, u = frame(c)
-        _ellipse(m, H, g, p + n * 0.0012, t, u, 0.0138, 0.0074, "anny_eye_dark")
-        _ellipse(m, H, g, p + n * 0.0016, t, u, 0.0120, 0.0056, "anny_eye_white")
-        _ellipse(m, H, g, p + n * 0.0020, t, u, 0.0050, 0.0050, "anny_iris")
-        brow = p + u * 0.0235 + n * 0.0014
-        _ellipse(m, H, g, brow, t, u, 0.0165, 0.0036, f"anny_brow_{of['hair_color']}", 8)
+        pts[sd] = (p, n, t, u)
+        flip = sd == "R"
+        put(p, n, t, u, 0.0, 0.0, 0.047, 0.0245, TH.face_uv("eye", eye), "anny_face", flip)
+        put(p, n, t, u, 0.0, 0.0285, 0.050, 0.0155, TH.face_uv("brow", brow), f"anny_brow_{hc}", flip)
+        out = 1.0 if sd == "L" else -1.0
+        if (fem and yr < 42 and rng.random() < 0.7) or rng.random() < 0.2:
+            put(p, n, t, u, out * 0.012, -0.040, 0.058, 0.042, TH.face_uv("blush", 0), "anny_face")
+        if yr > 38 or rng.random() < 0.2:
+            put(p, n, t, u, 0.0, -0.0165, 0.036, 0.018, TH.face_uv("blush", 1), "anny_face")
+        if yr > 45:
+            put(p, n, t, u, out * 0.030, 0.0, 0.028, 0.022, TH.face_uv("wrinkle", 1), "anny_face", sd == "R")
+    if "L" in pts and "R" in pts:
+        mid = (pts["L"][0] + pts["R"][0]) / 2
+        p, n, t, u = frame(mid)
+        if yr > 50:
+            put(p, n, t, u, 0.0, 0.052, 0.085, 0.032, TH.face_uv("wrinkle", 0), "anny_face")
+        if yr < 40 and rng.random() < 0.18:
+            put(p, n, t, u, 0.0, -0.022, 0.105, 0.042, TH.face_uv("blush", 2), "anny_face")
+        if rng.random() < 0.10:
+            put(p, n, t, u, rng.uniform(-0.04, 0.04), rng.uniform(-0.05, -0.02), 0.0065, 0.0065, TH.face_uv("blush", 3), "anny_face")
     c = centroid(lambda p: p == "mouth_cavity")
     if c is not None:
         p, n, t, u = frame(c)
-        _ellipse(m, H, g, p + n * 0.0012, t, u, 0.0190, 0.0042, "anny_lip")
+        smile = spec.get("expr", {}).get("mouthSmileLeft", 0.0)
+        tile = 3 if smile > 0.32 else (1 if fem and rng.random() < 0.5 else rng.choice([0, 0, 2]))
+        put(p, n, t, u, 0.0, 0.0, 0.044, 0.022, TH.face_uv("lips", tile), "anny_face")
+        if yr > 50:
+            for sg in (1, -1):
+                put(p, n, t, u, sg * 0.024, 0.016, 0.03, 0.038, TH.face_uv("wrinkle", 2), "anny_face", sg < 0)
 
 
 def build_mesh(m, group, k, topology=LOD, pose_override=None, cache=None, ground=None, decimate=True):
@@ -213,7 +249,7 @@ def build_mesh(m, group, k, topology=LOD, pose_override=None, cache=None, ground
                 if len(tris) <= 5000 or cell > 0.011:
                     break
                 cell *= 1.2
-            V2 = _push_out(H, b, g, V2)
+            V2 = V2 if any(k in c["name"] for k in ("skirt", "tiered")) else _push_out(H, b, g, V2)
             m.v.extend(map(tuple, V2.tolist()))
             for t in tris:
                 m.f.append(tuple(i + o for i in t)); m.m.append(c["mat"]); m.uv.append(None)

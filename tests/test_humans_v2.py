@@ -81,5 +81,48 @@ def test_module_has_face_decals_and_no_holes_material():
     from vt.materials import MATERIALS
     m = get(lib_anny.NAMES["casual"][2])
     mats = set(m.m)
-    assert {"anny_eye_white", "anny_iris", "anny_lip"} <= mats and mats <= set(MATERIALS)
+    assert "anny_face" in mats and any(x.startswith("anny_brow_") for x in mats) and mats <= set(MATERIALS)
     assert len(m.f) < 30000
+
+
+def test_fabric_and_decal_assets_exist():
+    from vt import textures_human as TX
+    from vt.materials import MATERIALS
+    for f in TX.FABRICS:
+        assert (TX.TEX / f"fabric_{f}.png").exists() and "anny_cl_navy_" + f in MATERIALS
+    for n in ("print_atlas.png", "detail_atlas.png", "face_atlas.png", "stubble.png"):
+        assert (TX.TEX / n).exists()
+    assert (TX.TEX / "face_atlas.png").stat().st_size < 400_000
+
+
+def test_face_uv_inside_atlas_and_distinct():
+    from vt import textures_human as TX
+    seen = set()
+    for kind, n in (("eye", 4), ("brow", 4), ("lips", 4), ("blush", 4), ("wrinkle", 3)):
+        for i in range(n):
+            u0, v0, u1, v1 = TX.face_uv(kind, i)
+            assert 0 <= u0 < u1 <= 1 and 0 <= v0 < v1 <= 1
+            seen.add((u0, v0))
+    assert len(seen) == 19
+
+
+@needs_pk
+def test_hair_and_beard_variety():
+    kinds, beards, colors, shoes = set(), set(), set(), set()
+    for g, n in lib_anny.GROUPS.items():
+        for k in range(n):
+            sp = lib_anny.spec_of(g, k)
+            of = H.outfit(sp, random.Random(sp["seed"] * 31 + 5))
+            kinds.add(of["hair_kind"]); beards.add(of["beard"]); colors.add(of["hair_color"]); shoes.add(of["shoe_type"])
+    assert {"card", "buzz", "pony"} <= kinds and {"stubble", "beard"} & beards and len(colors) >= 6 and len(shoes) >= 3
+
+
+@needs_pk
+def test_decals_and_shoes_in_module():
+    from vt.modules.library import get
+    from collections import Counter
+    c = Counter()
+    for n in lib_anny.NAMES["casual"][:14] + lib_anny.NAMES["student"][:4]:
+        c.update(get(n).m)
+    assert c["anny_print"] > 0 and c["anny_detail"] > 0
+    assert any(k.startswith("anny_sole_") for k in c) and any(k.startswith("anny_lace_") for k in c)

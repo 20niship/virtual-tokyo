@@ -45,6 +45,6 @@ for g, k, clip in CAST:
         render.add_camera(cam, tgt, lens)
         sc = bpy.context.scene
         sc.view_settings.look = "AgX - Base Contrast"
-        sc.view_settings.exposure = render.estimate_exposure(0.17) - 0.9
+        sc.view_settings.exposure = render.estimate_exposure(0.17) - 1.3
         render.render(OUT / f"{g}{k}_{shot}.png")
 (OUT / "tris.txt").write_text("")

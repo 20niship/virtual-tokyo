@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 HERO = dict(office=4, casual=6, elder=3, student=4, kid=3, heavy=1, worker=3)
 
 from vt import humans_motion as HM
-print("hair textures:", len(H.make_hair_textures()))
+from vt import textures_human as TX
+print("hair textures:", len(H.make_hair_textures()), "fabrics:", len(TX.make_all()))
+TX.make_face()
 if "--no-anim" not in sys.argv:
     clips = HM.make_all() if HM.MOCAP.exists() else {}
     if clips:

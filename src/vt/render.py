@@ -156,6 +156,15 @@ def get_material(mid):
             L(wm.outputs[2], bsdf.inputs["Base Color"])
     if not d.get("glass"):
         bsdf.inputs["Metallic"].default_value = d["metal"]
+    if d.get("skin"):
+        _skin(nt, bsdf, texc, d)
+    if d.get("hair"):
+        _hair(nt, bsdf, texc, d)
+    if d.get("alpha"):
+        try:
+            mat.surface_render_method = "DITHERED"     # Eevee でも alpha を確率的に描く(Cycles は標準で確率的)
+        except Exception:
+            pass
     if REAL and TIME != "day" and d.get("tex") in ("shop_atlas.png", "ad_atlas.png", "sign_atlas.png", "station_signs.png"):
         img = next((n for n in nt.nodes if n.type == "TEX_IMAGE" and n.image and n.image.name.startswith(d["tex"][:8])), None)
         if img is not None:       # 看板テクスチャを自発光させる(夜の店舗看板・広告)
@@ -163,6 +172,55 @@ def get_material(mid):
             bsdf.inputs["Emission Strength"].default_value = 3.0 if TIME == "night" else 1.2
     _mat_cache[mid] = mat
     return mat
+
+
+def _skin(nt, bsdf, texc, d):
+    """肌: 皮下散乱(赤が深く入る)+毛穴の微細バンプ(Object 座標なので UV 不要)"""
+    N, L = nt.nodes.new, nt.links.new
+    try:
+        bsdf.inputs["Subsurface Weight"].default_value = d.get("sss", 0.08)
+        bsdf.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.18)
+        bsdf.inputs["Subsurface Scale"].default_value = 0.005
+        bsdf.inputs["Coat Weight"].default_value = 0.05
+    except KeyError:
+        pass
+    pore = N("ShaderNodeTexNoise"); pore.inputs["Scale"].default_value = 900.0; pore.inputs["Detail"].default_value = 2.0
+    L(texc.outputs["Object"], pore.inputs["Vector"])
+    bp = N("ShaderNodeBump"); bp.inputs["Strength"].default_value = 0.12; bp.inputs["Distance"].default_value = 0.0006
+    L(pore.outputs["Fac"], bp.inputs["Height"])
+    L(bp.outputs[0], bsdf.inputs["Normal"])
+
+
+def _hair(nt, bsdf, texc, d):
+    """髪カード: 根元→毛先の明暗(高さ方向)+毛束の筋(UV の細長いノイズ)で色むらを付け、alpha はしきい値で締める"""
+    N, L = nt.nodes.new, nt.links.new
+    col =bsdf.inputs["Base Color"].links[0].from_socket if bsdf.inputs["Base Color"].links else None
+    if col is None:
+        return
+    sep = N("ShaderNodeSeparateXYZ"); L(texc.outputs["Object"], sep.inputs[0])
+    gr = N("ShaderNodeMapRange"); gr.inputs[1].default_value = 1.62; gr.inputs[2].default_value = 1.30; gr.inputs[3].default_value = 0.78; gr.inputs[4].default_value = 1.22
+    gr.clamp = True
+    L(sep.outputs["Z"], gr.inputs[0])
+    st = N("ShaderNodeTexNoise"); st.inputs["Scale"].default_value = 28.0; st.inputs["Detail"].default_value = 1.0
+    mp = N("ShaderNodeMapping"); mp.inputs["Scale"].default_value = (1.0, 14.0, 1.0)
+    L(texc.outputs["UV"], mp.inputs["Vector"]); L(mp.outputs[0], st.inputs["Vector"])
+    sm = N("ShaderNodeMapRange"); sm.inputs[1].default_value = 0.0; sm.inputs[2].default_value = 1.0; sm.inputs[3].default_value = 0.8; sm.inputs[4].default_value = 1.25
+    L(st.outputs["Fac"], sm.inputs[0])
+    m1 = N("ShaderNodeMix"); m1.data_type = "RGBA"; m1.blend_type = "MULTIPLY"; m1.inputs[0].default_value = 1.0
+    L(col, m1.inputs[6])
+    g3 = N("ShaderNodeCombineColor"); L(gr.outputs[0], g3.inputs[0]); L(gr.outputs[0], g3.inputs[1]); L(gr.outputs[0], g3.inputs[2])
+    L(g3.outputs[0], m1.inputs[7])
+    m2 = N("ShaderNodeMix"); m2.data_type = "RGBA"; m2.blend_type = "MULTIPLY"; m2.inputs[0].default_value = 1.0
+    L(m1.outputs[2], m2.inputs[6])
+    g4 = N("ShaderNodeCombineColor"); L(sm.outputs[0], g4.inputs[0]); L(sm.outputs[0], g4.inputs[1]); L(sm.outputs[0], g4.inputs[2])
+    L(g4.outputs[0], m2.inputs[7])
+    L(m2.outputs[2], bsdf.inputs["Base Color"])
+    try:
+        bsdf.inputs["Specular IOR Level"].default_value = 0.6
+        bsdf.inputs["Anisotropic"].default_value = 0.5
+        bsdf.inputs["Sheen Weight"].default_value = 0.15
+    except KeyError:
+        pass
 
 
 TEXDIR = __import__("pathlib").Path(__file__).resolve().parents[2] / "assets/textures"
@@ -206,6 +264,9 @@ def _textured(nt, bsdf, d, base, texc, objinfo):
             img = type("T", (), {"outputs": {"Color": tn.outputs[2], "Alpha": img.outputs["Alpha"]}})()
         if d.get("alpha"):
             alpha = img.outputs["Alpha"]
+            if d.get("cutout"):
+                ac = N("ShaderNodeMapRange"); ac.inputs[1].default_value = d["cutout"] - 0.12; ac.inputs[2].default_value = d["cutout"] + 0.12; ac.clamp = True
+                L(alpha, ac.inputs[0]); alpha = ac.outputs[0]
         else:
             alpha = None
         if d.get("bump"):
