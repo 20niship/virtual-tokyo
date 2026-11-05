@@ -40,11 +40,28 @@
 
 車道の轍(`asphalt_rut`)・ひび(3種)・補修短冊/矩形パッチ・マンホール・グレーチング+集水桝(25〜40m間隔)・白線のかすれ(`paint_wear`)・縁石際の落ち葉/水たまり/油染み/タイヤ痕/掘削復旧帯/マンホール5種(`overlays.py`)・中央分離帯の植栽帯/ガード型・切下げ(`_ramp`)。
 
+## 追加実装(第2弾)
+
+| 項目 | 内容 | 場所 |
+|---|---|---|
+| 歩道タイル | 目地幅・列ずれが不規則、1枚ごとの明るさのばらつき、角の欠け、補修ブロック、目地の苔、雨だれ状の汚れ。インターロッキング/平板/御影石の3枚を再生成 | `textures.pavers()` |
+| 点字ブロック | 切り下げ幅いっぱいの点状(車道側縁+歩道側の取り付け端)、歩道奥へ向かう線状ブロック1.8m | `roads._ramp` |
+| 植樹桝の縁取り | 1.5m角・幅12cm高12cmの縁石+土+バークチップ。グレーチングと約45:55で混在 | `veg_tree_pit_curb` / `vegetation.py` |
+| 鋳鉄蓋のマンホール | 直径0.6m、受枠+蓋盤+種別の模様(下水=格子+二重円、水道=十字+円、ガス=平行リブ、電気=升目、通信=円+横リブ)。路面に面一 | `rd_cover_{sewer,water,gas,elec,tele}` |
+| 集水桝 | 鋳鉄スリット蓋0.5×0.35m(桟ピッチ4cm)を25〜55m間隔で縁石際に。旧グレーチングのデカールは廃止 | `rd_catchbasin_cast` / `overlays.py` |
+| 縁石反射板 | 白/黄の小板を縁石の車道側面に24〜60m間隔(幹線のみ) | `rd_curb_reflector_{white,amber}` |
+| 車両出入口の切り下げ | 縁石天端→路面へ0.9mのくさび+歩道側の幅1.2m帯、幅4m、両脇にポール(`bollard_fixed`)。局所道路のみ45〜100m間隔 | `rd_driveway_apron_{05,15}` |
+
+ガードパイプ・ボラードは既存の `furniture_osm.rule_guardpipes/rule_bollards`(OSM優先+ルール配置)で配置済みのため新規は作っていない。
+
+近景(高解像度)確認: `uv run python scripts/road_closeup.py out/render/roadclose autumn_y`。落ち葉は初版が大きく白っぽい(葉15〜20cm・パステル)ため、葉サイズを0.26〜0.45倍、輝度を下げて調整した。
+
 ## 前後比較
 
-`RENDER_ROOT=<tag> uv run python scripts/build_city.py --spot west_intersection --render --per 3 --round <N> --no-usd` → `out/render/<tag>/spots/west_intersection/round<N>/`(gitignore)。roadpre=変更前、roadpost=変更後。
+`RENDER_ROOT=<tag> uv run python scripts/build_city.py --spot west_intersection --render --per 3 --round <N> --no-usd`(**道路変更後は `out/cache` を消す**。キャッシュに道路メッシュが入る)。
+`out/render/roadpre/...`=変更前、`roadpost/`=第1弾(縁石)、`roadpost2/`=第2弾、`roadclose/`=近景。いずれも `west_intersection/round0/`(gitignore)。
 
 ## 残課題
 
-- 歩道タイルの目地の不規則さ・欠け、点字ブロックの横断歩道前〜角の連続敷設、植樹桝の縁石、集水桝の鋳鉄蓋モジュール化は未実装。
 - 上の「確認できなかった項目」の寸法照合。
+- 点字ブロックは切り下げ部に限る。交差点の角全周・歩道の分岐点への連続敷設は未対応。

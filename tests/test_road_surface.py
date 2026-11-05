@@ -90,3 +90,16 @@ def test_curb_has_chamfer_top_and_l_gutter():
     n_top = sum(1 for x in m.m if x == "curb_top")
     n_gut = sum(1 for x in m.m if x == "gutter_l")
     assert n_top >= 2 * n_gut > 0                             # 縁石ごとに 面取り+天端 の2面、側溝1面
+
+
+def test_road_detail_modules_register_and_build():
+    from vt.materials import MATERIALS
+    from vt.modules.library import REG, get
+    names = [f"rd_cover_{k}" for k in ("sewer", "water", "gas", "elec", "tele")] + ["rd_catchbasin_cast", "rd_curb_reflector_amber", "rd_curb_reflector_white",
+                                                                                "rd_driveway_apron_05", "rd_driveway_apron_15", "veg_tree_pit_curb"]
+    for n in names:
+        mesh = get(n)
+        assert mesh.f and set(mesh.m) <= set(MATERIALS), n
+    import numpy as np
+    v = np.array(get("rd_cover_sewer").v).reshape(-1, 3)
+    assert v[:, 2].max() < 0.03 and abs(v[:, 0]).max() < 0.36            # 舗装に面一(上端3cm未満)・直径約0.6m

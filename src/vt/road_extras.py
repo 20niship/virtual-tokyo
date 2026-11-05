@@ -296,9 +296,7 @@ def drainage(mesh, e, s0, s1, zf, rng, both_curb=True):
         if sw > 0:
             t = side * (base - 0.4)
             x, y = a.x - math.sin(ang) * t, a.y + math.cos(ang) * t
-            if rng.random() < 0.65:
-                decal(mesh, x, y, ang, 0.3, 0.6, "decal_grating", zf, 0.034)
-            else:
+            if rng.random() >= 0.65:               # グレーチング付き集水桝は overlays が鋳鉄蓋モジュール(rd_catchbasin_cast)で置く
                 decal(mesh, x, y, ang, 0.5, 0.5, "decal_drain_inlet", zf, 0.034)
         alt = -alt
         s += rng.uniform(25, 40)

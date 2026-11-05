@@ -642,7 +642,11 @@ def _ramp(mesh, R, n, ch, zf, tactile):
     cx = sum(p[0] for p in near) / 2; cy = sum(p[1] for p in near) / 2
     if tactile or True:
         ang = math.atan2(-ny, -nx)   # 縁→歩道方向の逆(進行=車道へ向く)
-        decal(mesh, cx + nx * 0.4, cy + ny * 0.4, ang, 1.5, 0.6, "decal_tbs_dot", zf, 0.04 + ch * 0.2)
+        wd = min(4.0, max(1.2, math.dist(near[0], near[1])))           # 切り下げ幅いっぱいに敷く(横断歩道の幅に合わせた連続敷設)
+        decal(mesh, cx + nx * 0.4, cy + ny * 0.4, ang, wd, 0.6, "decal_tbs_dot", zf, 0.04 + ch * 0.2)
+        fx = sum(p[0] for p in far) / 2; fy = sum(p[1] for p in far) / 2
+        decal(mesh, fx + nx * 0.3, fy + ny * 0.3, ang, wd, 0.6, "decal_tbs_dot", zf, 0.04 + ch)     # 歩道側の取り付け端にも(傾斜路の始終端30cm手前)
+        decal(mesh, fx + nx * 1.5, fy + ny * 1.5, ang, 0.3, 1.8, "decal_tbs_line", zf, 0.04 + ch)    # 歩道奥へ誘導する線状ブロック
 
 
 def _crossing(mesh, c, zf, rng, cfg, plan, ctx):

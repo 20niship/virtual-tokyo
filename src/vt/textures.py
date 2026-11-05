@@ -67,23 +67,57 @@ def bricks(n, bw, bh, gap, cols, seed, jitter=0.07, bond=True):
     return img
 
 
+def pavers(n, bw, bh, cols, seed, bond=0.5, gap=(1, 3), wobble=0.12, chip=0.10, stain=0.9):
+    """歩道ブロック/平板: 目地の幅と列のずれが不規則、1枚ごとに明るさ・色味がばらつき、角が欠け、目地に汚れ/苔、全体に雨だれ状の汚れ"""
+    r = np.random.default_rng(seed)
+    img = np.zeros((n, n, 3)); img[:] = rgb("#55524c")                             # 目地(暗い)
+    pal = [rgb(c) for c in cols]
+    ny = int(round(n / bh))
+    row_h = n / ny
+    for j in range(ny):
+        y0, y1 = int(j * row_h), int((j + 1) * row_h)
+        off = (bw * bond if j % 2 else 0) + r.normal(0, bw * 0.03)
+        x = -off
+        while x < n:
+            w = bw * (1 + r.uniform(-wobble, wobble))
+            g0, g1 = r.integers(gap[0], gap[1] + 1), r.integers(gap[0], gap[1] + 1)
+            xa, xb = int(x) + g0, int(x + w) - g1
+            c = pal[r.integers(len(pal))] * (1 + r.normal(0, 0.06)) * (1 + r.normal(0, 0.008, 3))
+            xs = np.arange(xa, xb) % n
+            ya, yb = y0 + int(g0), y1 - int(g1)
+            blk = np.broadcast_to(c, (yb - ya, len(xs), 3)).copy()
+            blk *= (1 + 0.06 * r.standard_normal((yb - ya, len(xs), 1)))              # 表面の粒
+            if r.random() < chip and blk.shape[0] > 6 and blk.shape[1] > 6:           # 角の欠け
+                k = int(r.integers(2, 6)); cx = r.integers(0, 2); cy = r.integers(0, 2)
+                sx = slice(0, k) if cx == 0 else slice(-k, None); sy = slice(0, k) if cy == 0 else slice(-k, None)
+                blk[sy, sx] = rgb("#58554f")
+            if r.random() < 0.03:                                                      # 割れた/色の違う補修ブロック
+                blk *= 0.72
+            img[ya:yb][:, xs] = blk
+            x += w
+    low = tnoise(n, 1.6, seed + 1)
+    img *= (0.88 + 0.22 * low)[..., None]                                              # 色むら
+    joint = (img.mean(-1) < 0.36).astype(float)
+    moss = (tnoise(n, 0.9, seed + 2) > 0.62) * joint                                   # 目地の苔/土
+    img = img * (1 - 0.4 * moss[..., None]) + rgb("#4a5a34") * 0.4 * moss[..., None]
+    streak = tnoise(n, 0.5, seed + 3)                                                  # 縦方向の汚れ(雨だれ)
+    k = np.exp(-np.arange(n) / 40.0)
+    st = np.real(np.fft.ifft(np.fft.fft(streak, axis=0) * np.fft.fft(k)[:, None], axis=0)); st = (st - st.min()) / (st.max() - st.min())
+    img *= (1 - stain * 0.22 * st)[..., None]
+    return img
+
+
 def sidewalk(n=1024):
-    img = bricks(n, 64, 32, 2, ["#b0a79a", "#a89b8b", "#98908a", "#b8aea0"], 4)   # インターロッキング(長手)
-    img *= (0.9 + 0.2 * tnoise(n, 1.2, 5))[..., None]
+    img = pavers(n, 64, 32, ["#b0a79a", "#a89b8b", "#98908a", "#b8aea0", "#a39d98"], 4, 0.5, (1, 3), 0.12, 0.12)   # インターロッキング(長手)
     save("sidewalk_paver.png", img)
-    # コンクリート平板 60x60
-    g = np.zeros((n, n, 3)); g[:] = rgb("#a4a29c")
-    g *= (0.88 + 0.2 * tnoise(n, 1.5, 6))[..., None]
-    s = n // 4
-    for k in range(4):
-        g[k * s:k * s + 3, :] *= 0.55; g[:, k * s:k * s + 3] *= 0.55
+    # コンクリート平板 60x60(目地が不規則、欠け・汚れ)
+    g = pavers(n, n // 4, n // 4, ["#a4a29c", "#9c9a94", "#aeaca5"], 6, 0.0, (2, 4), 0.02, 0.2, 1.2)
     save("sidewalk_tile.png", g)
     # カラーアスファルト(歩道)
     a = tint(0.35 + 0.35 * tnoise(n, 0.8, 8) * 0.6 + 0.3 * tnoise(n, 0.2, 10) * 0.4, "#6f635a", "#a09283")
     save("sidewalk_asphalt.png", a)
     # 御影石の平板 300x600
-    st = bricks(n, 128, 256, 3, ["#8a8985", "#9a9791", "#7a7a78", "#a6a39b"], 11, 0.06, False)
-    st *= (0.9 + 0.2 * tnoise(n, 1.0, 12))[..., None]
+    st = pavers(n, 256, 128, ["#8a8985", "#9a9791", "#7a7a78", "#a6a39b"], 11, 0.0, (2, 3), 0.03, 0.1)
     save("sidewalk_granite.png", st)
 
 
