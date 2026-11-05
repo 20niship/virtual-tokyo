@@ -93,13 +93,13 @@ def sample(seed, group="casual", female=None):
     pr = PROFILES[group]
     f = (rng.random() < pr["p_f"]) if female is None else female
     years = rng.uniform(*pr["age"])
-    p = dict(gender=1.0 if f else 0.0, age=age_param(years), muscle=float(np.clip(rng.gauss(*pr["mu"]), 0.05, 0.95)),
-             weight=float(np.clip(rng.gauss(*pr["w"]), 0.05, 0.95)), height=0.5, proportions=float(np.clip(rng.gauss(0.5, 0.12), 0.1, 0.9)),
+    p = dict(gender=1.0 if f else 0.0, age=age_param(years), muscle=float(np.clip(rng.gauss(pr["mu"][0], pr["mu"][1] * 1.4), 0.04, 0.96)),
+             weight=float(np.clip(rng.gauss(pr["w"][0], pr["w"][1] * 1.4), 0.04, 0.96)), height=0.5, proportions=float(np.clip(rng.gauss(0.5, 0.17), 0.05, 0.95)),
              african=0.0, asian=1.0, caucasian=0.0, cupsize=float(np.clip(rng.gauss(0.45, 0.15), 0.1, 0.9)), firmness=float(np.clip(rng.gauss(0.5, 0.15), 0.1, 0.9)))
     cm = None
     if pr["h"]:
         mu, sd = pr["h"][1 if f else 0]
-        cm = rng.gauss(mu, sd)
+        cm = rng.gauss(mu, sd * 1.3)
         if years > 60:
             cm -= (years - 60) * 0.18            # 加齢による身長低下
         p["height"] = solve_height(p, cm)
@@ -393,12 +393,19 @@ def outfit(spec, rng):
     from . import humans_wear as W
     f = spec["female"]
     o = dict(pieces=W.make_outfit(spec, rng), hair=rng.choice(HAIRS["f" if f else "m"]))
-    if spec["years"] > 60:
-        o["hair_color"] = rng.choice(["gray", "gray", "white", "black"])
+    yr = spec["years"]
+    if yr > 62:
+        o["hair_color"] = rng.choices(["gray", "white", "silver", "black", "dark"], [5, 4, 1, 2, 1])[0]
+    elif yr > 48:
+        o["hair_color"] = rng.choices(["black", "dark", "gray", "brown", "chestnut", "white"], [8, 3, 4, 2, 1, 1])[0]
     else:
-        o["hair_color"] = rng.choice(["black"] * 6 + ["dark", "brown", "chestnut"])
+        o["hair_color"] = rng.choices(["black", "dark", "brown", "chestnut", "blond", "auburn", "dyed_red", "pink", "blue", "purple", "silver", "teal"],
+                                      [60, 9, 9, 6, 4, 3, 2, 1, 1, 1, 1, 1] if yr < 36 else [70, 10, 8, 6, 2, 2, 1, 0, 0, 0, 1, 0])[0]
     o["skin"] = rng.randrange(len(SKIN))
-    o["shoe_color"] = rng.choice(["black", "white", "navy", "gray", "brown"])
+    o["shoe_type"] = rng.choices(["sneaker", "loafer", "flat", "boot"], [45, 25, 20, 10])[0]
+    o["shoe_color"] = rng.choice(["white", "white", "black", "black", "navy", "gray", "brown", "red", "beige", "olive"]) if o["shoe_type"] == "sneaker" else rng.choice(["black", "black", "brown", "navy", "beige", "gray"])
+    o["sole"] = rng.choice(["white", "white", "gum"]) if o["shoe_type"] == "sneaker" else rng.choice(["black", "black", "gum", "brown"])
+    o["lace"] = "white" if o["shoe_color"] in ("black", "navy", "red", "brown", "olive", "gray") and rng.random() < 0.7 else "black"
     hat = any(p[1] in ("hat", "helmet") for p in o["pieces"])
     o["hat"] = hat
     return o

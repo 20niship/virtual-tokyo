@@ -162,10 +162,25 @@ def _arm(d, side, du, df):
     _aim(d, side, (du[0] * sg, du[1], du[2]), (df[0] * sg, df[1], df[2]))
 
 
+RELAXED = dict(index=(18, 28, 20), middle=(22, 32, 24), ring=(26, 36, 26), pinky=(30, 38, 26), thumb=(8, 10, 8))
+SPREAD = dict(index=4, middle=0, ring=-4, pinky=-9, thumb=0)
+
+
 def _fingers(d, curl=1.0):
-    for fn in ("index", "middle", "ring", "pinky", "thumb"):
-        for i, a in ((1, 12), (2, 20), (3, 16)):
-            _both(d, f"{fn}_0{i}", [("x", -a * curl)])
+    """指を軽く握った自然な形(人差し指〜小指の曲げ量を段階的に、わずかに扇状)"""
+    for fn, ang in RELAXED.items():
+        for i, a in enumerate(ang, 1):
+            _both(d, f"{fn}_0{i}", [("x", -a * curl), ("z", SPREAD[fn] if i == 1 else 0)])
+
+
+def relax_fingers(Q):
+    """取り込んだクリップの指の回転を、軽く握った形に置き換える(UAL の指は T/A ポーズ基準で崩れやすい)"""
+    L = _model().bone_labels
+    d = {}
+    _fingers(d)
+    for n, M in d.items():
+        Q[:, L.index(n)] = Rot.from_matrix(M[:3, :3]).as_quat()
+    return Q
 
 
 def _p_idle_hands(ph):
@@ -235,7 +250,8 @@ def make_all(npz=True):
     if z is not None:
         for name, src, sp, amp, loop in UAL_CLIPS:
             if src + "/rot" in z:
-                clips[name] = retarget_ual(src, sp, amp, z)
+                q, t = retarget_ual(src, sp, amp, z)
+                clips[name] = (relax_fingers(q), t)
     for name, fn, n in PROCEDURAL:
         clips[name] = _clip_from_pose_fn(fn, n)
     return clips

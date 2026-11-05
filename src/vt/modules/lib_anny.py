@@ -7,13 +7,13 @@ LOD = "notoes_collapse10pc"
 DECIM_MIN = int(__import__("os").environ.get("HVT_DECIM_MIN", 2500))
 # group ごとのモーション(クリップ名, 重み)。walk 系=歩道を歩く人 / idle 系=横断待ち・立ち話 / sit=ベンチ
 CLIPS = dict(
-    office=[("walk_formal", 5), ("walk", 3), ("idle_phone", 2), ("idle", 2), ("carry", 2), ("talk", 1)],
-    casual=[("walk", 5), ("walk_slow", 2), ("idle", 3), ("idle_phone", 3), ("talk", 2), ("carry", 2), ("jog", 1), ("idle_hands", 1), ("wave", 1), ("sit", 1)],
-    elder=[("walk_slow", 6), ("idle", 3), ("talk", 2), ("carry", 2), ("sit", 1), ("idle_hands", 1)],
-    student=[("walk", 4), ("jog", 1), ("idle_phone", 3), ("talk", 3), ("idle", 2), ("wave", 1), ("sit_talk", 1)],
-    kid=[("walk", 3), ("run", 2), ("jog", 1), ("idle", 2), ("wave", 1)],
-    heavy=[("walk_slow", 4), ("idle", 2), ("idle_phone", 1), ("carry", 1)],
-    worker=[("walk", 4), ("idle", 2), ("carry", 3), ("push", 1), ("interact", 1)],
+    office=[("walk_formal", 7), ("walk", 3), ("idle", 4), ("idle_phone", 2), ("carry", 2), ("talk", 1)],
+    casual=[("walk", 8), ("walk_slow", 2), ("idle", 5), ("idle_phone", 3), ("talk", 1), ("carry", 2), ("jog", 1), ("wave", 1)],
+    elder=[("walk_slow", 8), ("idle", 4), ("talk", 1), ("carry", 2), ("idle_hands", 1)],
+    student=[("walk", 6), ("jog", 1), ("idle_phone", 3), ("talk", 1), ("idle", 3), ("wave", 1)],
+    kid=[("walk", 4), ("run", 2), ("jog", 1), ("idle", 3), ("wave", 1)],
+    heavy=[("walk_slow", 5), ("idle", 3), ("idle_phone", 1), ("carry", 1)],
+    worker=[("walk", 5), ("idle", 3), ("carry", 3), ("push", 1)],
 )
 WALK = {"walk", "walk_slow", "walk_formal", "jog", "run", "carry", "push"}
 WAIT = {"idle", "idle_phone", "idle_hands", "talk", "wave", "interact"}
@@ -55,6 +55,54 @@ def _subset(m, H, b, g, pred, mat_of, push=0.0, cell=0.0):
     m.v.extend(map(tuple, H.to_world(P, ground=g).tolist()))
     for i in sel:
         m.f.append(tuple(remap[int(v)] + o for v in F[i])); m.m.append(mat_of(parts[i])); m.uv.append(None)
+
+
+def _shoes(m, H, b, g, of, lod):
+    """靴: 足の面を押し出し、高さでソール/アッパーに材質を分け、スニーカーは甲に紐を足す"""
+    import numpy as np
+    F, parts, Vf, nf = b["full"]["faces"], b["full"]["parts"], b["full"]["v"], b["full"]["nrm"]
+    sel = [i for i, p in enumerate(parts) if p.startswith("foot")]
+    if not sel:
+        return
+    vi = np.unique(F[sel])
+    rm = {int(v): i for i, v in enumerate(vi)}
+    P = H.to_world(Vf[vi] + nf[vi] * 0.007, ground=g)
+    faces = [[rm[int(v)] for v in F[i]] for i in sel]
+    if lod:
+        P, faces = H.decimate(P, faces, 0.016)
+    o = len(m.v)
+    m.v.extend(map(tuple, P.tolist()))
+    sole, upper = f"anny_sole_{of['sole']}", f"anny_shoe_{of['shoe_color']}"
+    for t in faces:
+        zc = sum(P[i][2] for i in t) / len(t)
+        m.f.append(tuple(i + o for i in t)); m.m.append(sole if zc < 0.022 else upper); m.uv.append(None)
+    if of["shoe_type"] != "sneaker":
+        return
+    L = H.model("anny").bone_labels
+    bp = b["bones_pose"]
+    for sd in ("l", "r"):
+        foot, ball = bp[L.index(f"foot_{sd}")][:3, 3], bp[L.index(f"ball_{sd}")][:3, 3]
+        d = (ball - foot) * np.array([1, 1, 0.0])
+        dl = np.linalg.norm(d)
+        if dl < 1e-3:
+            continue
+        d /= dl
+        lat = np.array([-d[1], d[0], 0.0])
+        pts = Vf[vi]
+        for t in np.linspace(0.1, 0.55, 5):
+            c = foot + d * dl * t
+            rel = pts - c
+            near = (np.abs(rel @ d) < 0.012) & (np.abs(rel @ lat) < 0.03)
+            if not near.any():
+                continue
+            zc = pts[near][:, 2].max() + 0.007 + 0.002
+            q = np.array([c + lat * 0.024 + d * 0.004, c - lat * 0.024 + d * 0.004, c - lat * 0.024 - d * 0.004, c + lat * 0.024 - d * 0.004])
+            q[:, 2] = zc
+            W = H.to_world(q, ground=g)
+            o = len(m.v)
+            m.v.extend(map(tuple, W.tolist()))
+            m.f.append((o, o + 1, o + 2)); m.m.append(f"anny_lace_{of['lace']}"); m.uv.append(None)
+            m.f.append((o, o + 2, o + 3)); m.m.append(f"anny_lace_{of['lace']}"); m.uv.append(None)
 
 
 def _push_out(H, b, g, V, margin=0.009):
@@ -174,7 +222,9 @@ def build_mesh(m, group, k, topology=LOD, pose_override=None, cache=None, ground
         for face in faces:
             m.f.append(tuple(vi + o for vi, _ in face)); m.m.append(c["mat"])
             m.uv.append([tuple(vt[t]) for _, t in face] if c["uv"] else None)
-    _subset(m, H, b, g, lambda p: p.startswith("foot"), lambda p: f"anny_shoe_{of['shoe_color']}", push=0.007, cell=0.016 if (topology != "anny" and decimate) else 0.0)
+    if topology != "anny":
+        _subset(m, H, b, g, lambda p: p.startswith("hand"), lambda p: f"anny_skin_{of['skin']}", push=0.004, cell=0.0045 if decimate else 0.0)
+    _shoes(m, H, b, g, of, decimate and topology != "anny")
     if topology != "anny":
         _face_decals(m, H, b, g, of)
     m.smooth = True

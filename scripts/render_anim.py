@@ -96,7 +96,7 @@ def run_clips():
         lab.append((v.x * RES[0], (1 - v.y) * RES[1], p.height))
     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 17)
     sc.render.image_settings.file_format = "PNG"
-    for f in range(FRAMES):
+    for f in range(opt("--start", 0), FRAMES):
         t = f / FPS
         for p in ppl:
             p.update(t)

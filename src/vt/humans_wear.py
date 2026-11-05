@@ -30,6 +30,25 @@ MH = dict(
 )
 
 
+def _skirt_fix(rf, Vr, cw, shrink=0.76):
+    """スカート/ワンピースの裾が脚の動きや体型で膨らみ過ぎないよう、腰から下を中心軸へ縮め、脚ボーンの重みを骨盤へ寄せる"""
+    L = H.model("anny").bone_labels
+    r = rf["rest_bone_poses"]
+    c = r[L.index("pelvis")][:3, 3]
+    z = Vr[:, 2]
+    zf = (z - rf["rest_vertices"][:, 2].min()) / (rf["rest_vertices"][:, 2].max() - rf["rest_vertices"][:, 2].min())
+    k = np.clip((0.56 - zf) / 0.12, 0.0, 1.0)[:, None]
+    V = Vr.copy()
+    V[:, :2] = c[:2] + (Vr[:, :2] - c[:2]) * (1 - k * (1 - shrink))
+    cw = cw.copy()
+    leg = [L.index(n) for n in ("thigh_l", "thigh_r", "calf_l", "calf_r")]
+    pel = L.index("pelvis")
+    mv = cw[:, leg].sum(1)
+    cw[:, leg] *= 0.4
+    cw[:, pel] += mv * 0.6
+    return V, cw
+
+
 def mh_piece(rf, key_or_triple, slot, color, margin, rng=None):
     """MakeHuman アセットを体に合わせた1枚。戻り: cloth 辞書(humans.build と同形式)"""
     pack, sub, name = key_or_triple
@@ -38,6 +57,8 @@ def mh_piece(rf, key_or_triple, slot, color, margin, rng=None):
     assert cl["license"] in ("CC0", "CC BY 4.0"), (name, cl["license"])
     Vr = H.fit_cloth(cl, rf["rest_vertices"], "anny", margin=margin)
     cw = H.bind(cl, "anny")["cw"]
+    if slot in ("dress",) or "skirt" in name:
+        Vr, cw = _skirt_fix(rf, Vr, cw)
     return dict(slot=slot, name=name, Vrest=Vr, V=H.skin(Vr, rf["rest_bone_poses"], rf["bone_poses"], cw), cw=cw, cl=cl, mat=color, uv=False)
 
 
@@ -186,7 +207,7 @@ def make_outfit(spec, rng):
     col = lambda *c: rng.choice(c)
     casual = ["white", "black", "navy", "gray", "beige", "red", "olive", "blue", "pink", "mustard", "brown", "khaki", "cream", "lightblue", "darkgreen", "purple", "orange"]
     dark = ["navy", "black", "gray", "beige", "olive", "brown", "khaki", "blue"]
-    top = lambda c: pcs.append(("mh", "top", _pick(rng, "top_f" if f else "top_m"), c, 0.010))
+    top = lambda c: pcs.append(("mh", "top", _pick(rng, "top_f" if f else "top_m"), c, 0.016))
     if g == "office":
         if rng.random() < 0.55:
             pcs.append(("mh", "suit", _pick(rng, "suit_f" if f else "suit_m"), col("navy", "black", "gray"), 0.014))
@@ -195,11 +216,11 @@ def make_outfit(spec, rng):
             if f and rng.random() < 0.5:
                 pcs.append(("mh", "bottom", _pick(rng, "skirt"), col("navy", "black", "gray"), 0.010))
             else:
-                pcs.append(("mh", "bottom", _pick(rng, "pants"), col("navy", "black", "gray"), 0.012))
+                pcs.append(("mh", "bottom", _pick(rng, "pants"), col("navy", "black", "gray"), 0.010))
             if rng.random() < 0.4:
-                pcs.append(("garment", "jacket", dict(zlo=0.52, arms="long", margin=0.034), col("navy", "gray", "black", "beige"), 0))
+                pcs.append(("garment", "jacket", dict(zlo=0.52, arms="long", margin=0.024), col("navy", "gray", "black", "beige"), 0))
     elif g == "student":
-        pcs.append(("garment", "blazer", dict(zlo=0.52, arms="long", margin=0.034), col("navy", "navy", "gray"), 0)) if rng.random() < 0.7 else None
+        pcs.append(("garment", "blazer", dict(zlo=0.52, arms="long", margin=0.024), col("navy", "navy", "gray"), 0)) if rng.random() < 0.7 else None
         top("white")
         if f:
             pcs.append(("mh", "bottom", ("skirts01", "clothes", "toigo_tiered_mini_skirt"), col("navy", "gray", "darkgreen"), 0.010))
@@ -218,9 +239,9 @@ def make_outfit(spec, rng):
             top(col(*casual))
             pcs.append(("mh", "bottom", _pick(rng, "pants" if rng.random() < 0.6 else "loose"), col(*dark), 0.012))
         if rng.random() < 0.45:
-            pcs.append(("garment", "coat", dict(zlo=0.40, arms="long", legs="thigh", legz=0.40, margin=0.046), col("beige", "navy", "brown", "gray", "darkgreen"), 0))
+            pcs.append(("garment", "coat", dict(zlo=0.40, arms="long", legs="thigh", legz=0.40, margin=0.030), col("beige", "navy", "brown", "gray", "darkgreen"), 0))
         elif rng.random() < 0.5:
-            pcs.append(("garment", "jacket", dict(zlo=0.52, arms="long", margin=0.034), col(*dark), 0))
+            pcs.append(("garment", "jacket", dict(zlo=0.52, arms="long", margin=0.024), col(*dark), 0))
         if rng.random() < 0.3:
             pcs.append(("mh", "hat", _pick(rng, "cloche" if f else "cap"), col("beige", "gray", "navy"), 0.006))
     elif g == "kid":
@@ -241,14 +262,14 @@ def make_outfit(spec, rng):
                 pcs.append(("mh", "bottom", _pick(rng, k), col(*dark), 0.012))
         r2 = rng.random()
         if r2 < 0.22:
-            pcs.append(("garment", "jacket", dict(zlo=0.52, arms="long", margin=0.034), col(*dark), 0))
+            pcs.append(("garment", "jacket", dict(zlo=0.52, arms="long", margin=0.024), col(*dark), 0))
         elif r2 < 0.34:
-            pcs.append(("garment", "coat", dict(zlo=0.40, arms="long", legs="thigh", legz=0.40, margin=0.046), col("beige", "navy", "gray", "black", "brown"), 0))
+            pcs.append(("garment", "coat", dict(zlo=0.40, arms="long", legs="thigh", legz=0.40, margin=0.030), col("beige", "navy", "gray", "black", "brown"), 0))
         if rng.random() < 0.22:
             pcs.append(("mh", "hat", _pick(rng, "cap"), col("black", "navy", "gray", "red", "white"), 0.006))
         if rng.random() < 0.28:
             pcs.append(("rigid", "backpack", None, col("black", "navy", "gray", "olive"), 0))
-    if rng.random() < (0.16 if g != "worker" else 0.25):
+    if rng.random() < (0.09 if g != "worker" else 0.15):
         pcs.append(("mh", "mask", _pick(rng, "mask"), col("white", "white", "lightblue", "gray"), 0.004))
     r3 = rng.random()
     if r3 < 0.12 and not any(p[1] == "backpack" for p in pcs):
