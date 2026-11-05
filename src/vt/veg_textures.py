@@ -120,11 +120,11 @@ def litter(name, seed, cols, n=512, count=70):
         x, y, w, h = rg.choice(sprites)
         sp = atlas.crop((x, y, x + w, y + h))
         a = np.asarray(sp, float) / 255
-        lum = a[..., :3].mean(-1, keepdims=True) * 1.5 + 0.25
+        lum = a[..., :3].mean(-1, keepdims=True) * 1.2 + 0.05
         col = np.array([int(rg.choice(cols).lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]) / 255
         rgb = np.clip(lum * col * rg.uniform(0.7, 1.15), 0, 1)
         sp = Image.fromarray((np.dstack([rgb, a[..., 3:]]) * 255).astype(np.uint8), "RGBA")
-        k = rg.uniform(0.35, 0.6)
+        k = rg.uniform(0.26, 0.45)
         sp = sp.resize((max(4, int(w * k)), max(4, int(h * k)))).rotate(rg.uniform(0, 360), expand=True)
         im.alpha_composite(sp, (rg.randint(0, n - sp.width), rg.randint(0, n - sp.height)))
     im.save(TEX / name, optimize=True)

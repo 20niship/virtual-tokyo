@@ -96,3 +96,18 @@ def _litter(kind, seed):
 
 for _k in "yrbg":
     reg(f"veg_litter_{_k}", _litter(_k, 0), W=3.0, H=0.02, cat=CAT)
+
+
+def _tree_pit_curb(m, W, H, rng):     # 歩道の植樹桝: 縁石(幅12cm・高さ12cm)で1.5m角を囲み、中は土+バークチップ
+    o, i, h = 0.75, 0.63, 0.12
+    m.box(-o, -o, 0, o, -i, h, "concrete_tex")
+    m.box(-o, i, 0, o, o, h, "concrete_tex")
+    m.box(-o, -i, 0, -i, i, h, "concrete_tex")
+    m.box(i, -i, 0, o, i, h, "concrete_tex")
+    m.box(-i, -i, 0.0, i, i, 0.07, "soil")
+    for _ in range(14):               # バークチップの小片
+        x, y = rng.uniform(-0.55, 0.55), rng.uniform(-0.55, 0.55)
+        m.box(x - 0.05, y - 0.03, 0.07, x + 0.05, y + 0.03, 0.09, "wood")
+
+
+reg("veg_tree_pit_curb", _tree_pit_curb, W=1.5, H=0.12, cat=CAT)

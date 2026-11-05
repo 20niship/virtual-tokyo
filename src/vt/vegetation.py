@@ -93,7 +93,7 @@ class Veg:
             self.n_tree += 1
             self.litter(sp, x, y, r_clear)
             if pit:
-                self.put("veg_tree_pit_grating", x, y, 0.0, jitter=False)
+                self.put("veg_tree_pit_grating" if self.rng.random() < 0.55 else "veg_tree_pit_curb", x, y, 0.0, jitter=False)
             return True
         return False
 
