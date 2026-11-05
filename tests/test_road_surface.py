@@ -81,3 +81,12 @@ def test_hump_and_camber_raise_pavement():
     base = 2.02
     assert max(zs) > base + 0.07          # ハンプ天端(+8cm)
     assert len({round(z, 3) for z in zs}) > 3   # カマボコ断面で高さが一様でない
+
+
+def test_curb_has_chamfer_top_and_l_gutter():
+    key = next(iter(grid.build_cases()))
+    m, _, _ = _build(key, barrier_free_rate=0.0)             # 高い縁石(12〜18cm)
+    assert {"curb_top", "gutter_l"} <= set(m.m)
+    n_top = sum(1 for x in m.m if x == "curb_top")
+    n_gut = sum(1 for x in m.m if x == "gutter_l")
+    assert n_top >= 2 * n_gut > 0                             # 縁石ごとに 面取り+天端 の2面、側溝1面

@@ -251,8 +251,19 @@ def _curb_faces(mesh, piece, cw, zf, h, mat="concrete_tex"):
                     if not cw.contains(Point(mx + nx * 0.15, my + ny * 0.15)):
                         continue
                 z0, z1 = zf(x0, y0), zf(x1, y1)
-                mesh.oriented([(x0, y0, z0 + h), (x0, y0, z0), (x1, y1, z1), (x1, y1, z1 + h)], (nx, ny, 0), mat,
+                # 縁石(歩道境界ブロック): 垂直面(h-2cm) → 2cm面取り → 天端0.15m(蹴上げ上面)。車道側に L型側溝(幅0.3m)
+                c = 0.02 if h > 0.04 else 0.0
+                mesh.oriented([(x0, y0, z0 + h - c), (x0, y0, z0), (x1, y1, z1), (x1, y1, z1 + h - c)], (nx, ny, 0), mat,
                               [(0, h), (0, 0), (L, 0), (L, h)])
+                ix0, iy0, ix1, iy1 = x0 - nx * c, y0 - ny * c, x1 - nx * c, y1 - ny * c
+                if c:
+                    mesh.oriented([(x0, y0, z0 + h - c), (x1, y1, z1 + h - c), (ix1, iy1, z1 + h), (ix0, iy0, z0 + h)], (nx, ny, 1), "curb_top", [(0, 0), (L, 0), (L, c), (0, c)])
+                tw = 0.15
+                mesh.oriented([(ix0, iy0, z0 + h + 0.002), (ix1, iy1, z1 + h + 0.002), (ix1 - nx * tw, iy1 - ny * tw, z1 + h + 0.002), (ix0 - nx * tw, iy0 - ny * tw, z0 + h + 0.002)],
+                              (0, 0, 1), "curb_top", [(0, 0), (L, 0), (L, tw), (0, tw)])
+                gw = 0.3
+                mesh.oriented([(x0, y0, z0 + 0.012), (x1, y1, z1 + 0.012), (x1 + nx * gw, y1 + ny * gw, z1 + 0.012), (x0 + nx * gw, y0 + ny * gw, z0 + 0.012)],
+                              (0, 0, 1), "gutter_l", [(0, 0), (L, 0), (L, gw), (0, gw)])
 
 
 RANK = {"motorway": 6, "trunk": 5, "primary": 4, "secondary": 3, "tertiary": 2, "unclassified": 1, "residential": 1, "living_street": 0, "service": 0,
