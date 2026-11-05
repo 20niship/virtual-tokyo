@@ -173,7 +173,11 @@ def pedestrians(w, rng):
                             pt = q
                             break
                 if pt is not None:
-                    out.append(Inst(_ped(rng, 0, "park"), pt.x, pt.y, T(pt.x, pt.y) + 0.06, rng.uniform(0, 6.28)))
+                    r0 = rng.uniform(0, 6.28)
+                    out.append(Inst(_ped(rng, 0, "park"), pt.x, pt.y, T(pt.x, pt.y) + 0.06, r0))
+                    if rng.random() < 0.35:     # 向かい合って立ち話する2人組
+                        qx, qy = pt.x - math.sin(r0) * 0.95, pt.y + math.cos(r0) * 0.95
+                        out.append(Inst(_ped(rng, 0, "park"), qx, qy, T(qx, qy) + 0.06, r0 + math.pi))
     return out
 
 

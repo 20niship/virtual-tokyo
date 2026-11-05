@@ -169,7 +169,7 @@ def run_city():
         _, g, k = i.name.split("_")
         clip, ph = A.pose_of(g, int(k))
         pr = Person(g, int(k), clip, phase0=ph, loc=(i.x, i.y, i.z), rot=i.rot)
-        sp = SPEED.get(clip, 0.0)
+        sp = SPEED.get(clip, 0.0) * pr.height / 1.7
         actors.append(("ped", pr, i, (-math.sin(i.rot) * sp, math.cos(i.rot) * sp)))
     for i in cars:
         o = bpy.data.objects.new(i.name, render.mesh_to_bpy(i.name, get(i.name)))

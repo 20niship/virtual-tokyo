@@ -69,7 +69,7 @@ def _shoes(m, H, b, g, of, lod):
     P = H.to_world(Vf[vi] + nf[vi] * 0.007, ground=g)
     faces = [[rm[int(v)] for v in F[i]] for i in sel]
     if lod:
-        P, faces = H.decimate(P, faces, 0.016)
+        P, faces = H.decimate(P, faces, 0.022)
     o = len(m.v)
     m.v.extend(map(tuple, P.tolist()))
     sole, upper = f"anny_sole_{of['sole']}", f"anny_shoe_{of['shoe_color']}"
@@ -234,6 +234,10 @@ def build_mesh(m, group, k, topology=LOD, pose_override=None, cache=None, ground
             p = parts[i]
             mat = "anny_iris" if p.startswith("eye_front") else "anny_sclera" if p.startswith("eye_back") else "anny_mouth" if p in ("mouth_cavity", "tongue") else "anny_eye_dark" if p.startswith("eye_cavity") else skin
         m.f.append(tuple(x + o for x in f)); m.m.append(mat); m.uv.append(None)
+    if pn == "idle_phone":
+        from .. import humans_wear as WR
+        b["cloth"].append(WR.phone(dict(rest_bone_poses=b["bones_rest"], bone_poses=b["bones_pose"], rest_vertices=b["rest"])))
+        b["cloth"][-1]["mat"] = "anny_cl_black"
     outer = any(c["slot"] in ("jacket", "blazer", "coat") for c in b["cloth"])
     for c in b["cloth"]:
         if outer and c["slot"] == "top":
@@ -242,7 +246,7 @@ def build_mesh(m, group, k, topology=LOD, pose_override=None, cache=None, ground
         Vc = H.to_world(c["V"], ground=g)
         vt = c["cl"]["vt"]
         faces = c["cl"]["faces"]
-        if decimate and topology != "anny" and not c["uv"] and len(faces) > DECIM_MIN:
+        if decimate and topology != "anny" and not c["uv"] and len(faces) > DECIM_MIN and not any(k in c["name"] for k in ("skirt", "tiered")):
             cell = 0.006
             while True:
                 V2, tris = H.decimate(Vc, [[vi for vi, _ in f] for f in faces], cell)
@@ -259,7 +263,7 @@ def build_mesh(m, group, k, topology=LOD, pose_override=None, cache=None, ground
             m.f.append(tuple(vi + o for vi, _ in face)); m.m.append(c["mat"])
             m.uv.append([tuple(vt[t]) for _, t in face] if c["uv"] else None)
     if topology != "anny":
-        _subset(m, H, b, g, lambda p: p.startswith("hand"), lambda p: f"anny_skin_{of['skin']}", push=0.004, cell=0.0045 if decimate else 0.0)
+        _subset(m, H, b, g, lambda p: p.startswith("hand"), lambda p: f"anny_skin_{of['skin']}", push=0.004, cell=0.0065 if decimate else 0.0)
     _shoes(m, H, b, g, of, decimate and topology != "anny")
     if topology != "anny":
         _face_decals(m, H, b, g, of)

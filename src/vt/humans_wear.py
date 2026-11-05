@@ -30,6 +30,17 @@ MH = dict(
 )
 
 
+def _to_pelvis(cw):
+    """トップスの裾の頂点が脚ボーンの動きに引っ張られて破れないよう、脚ボーンの重みを骨盤へ移す"""
+    L = H.model("anny").bone_labels
+    leg = [L.index(n) for n in ("thigh_l", "thigh_r", "calf_l", "calf_r", "foot_l", "foot_r", "ball_l", "ball_r")]
+    cw = cw.copy()
+    mv = cw[:, leg].sum(1)
+    cw[:, leg] = 0.0
+    cw[:, L.index("pelvis")] += mv
+    return cw
+
+
 def _skirt_fix(rf, Vr, cw, shrink=0.76):
     """スカート/ワンピースの裾が脚の動きや体型で膨らみ過ぎないよう、腰から下を中心軸へ縮め、脚ボーンの重みを骨盤へ寄せる"""
     L = H.model("anny").bone_labels
@@ -59,6 +70,8 @@ def mh_piece(rf, key_or_triple, slot, color, margin, rng=None):
     cw = H.bind(cl, "anny")["cw"]
     if slot in ("dress",) or "skirt" in name:
         Vr, cw = _skirt_fix(rf, Vr, cw)
+    if slot == "top":
+        cw = _to_pelvis(cw)
     return dict(slot=slot, name=name, Vrest=Vr, V=H.skin(Vr, rf["rest_bone_poses"], rf["bone_poses"], cw), cw=cw, cl=cl, mat=color, uv=False)
 
 
@@ -82,22 +95,39 @@ def garment(rf, name, zlo, arms="long", legs="none", legz=0.0, margin=0.02, colo
     zf = (V[:, 2] - V[:, 2].min()) / (V[:, 2].max() - V[:, 2].min())
     dom = np.array(m.bone_labels)[WF.argmax(1)]
     isin = lambda s: np.isin(dom, list(s))
-    sel = isin(TORSO) & (zf >= zlo)
+    zmin, zmax = V[:, 2].min(), V[:, 2].max()
+    sel = isin(TORSO)
     if arms in ("short", "long"):
         sel |= isin(UPPER)
     if arms == "long":
         sel |= isin(LOWER)
+    cut = np.full(len(V), -1e9)
+    cut[isin(TORSO)] = zmin + zlo * (zmax - zmin)
     if legs in ("thigh", "full"):
-        sel |= isin(THIGH) & (zf >= legz)
+        sel |= isin(THIGH)
+        cut[isin(THIGH)] = zmin + legz * (zmax - zmin)
     if legs == "full":
-        sel |= isin(CALF) & (zf >= max(legz, 0.04))
+        sel |= isin(CALF)
+        cut[isin(CALF)] = zmin + max(legz, 0.04) * (zmax - zmin)
     F = m.faces.numpy()
-    keep = sel[F].all(1)
+    keep = sel[F].all(1) & (V[F][:, :, 2].mean(1) >= cut[F].mean(1))      # 裾は面の重心で切り、下にはみ出す頂点は裾の高さに揃える(ギザギザにしない)
     used = np.unique(F[keep])
     rm = -np.ones(len(V), int)
     rm[used] = np.arange(len(used))
     nrm = H._vnormals(V, F)
     Vr = V[used] + nrm[used] * margin
+    Vr[:, 2] = np.maximum(Vr[:, 2], cut[used])
+    ec = {}
+    for f in F[keep]:
+        for a, b2 in zip(f, np.r_[f[1:], f[:1]]):
+            k = (a, b2) if a < b2 else (b2, a)
+            ec[k] = ec.get(k, 0) + 1
+    ring = np.zeros(len(V), bool)
+    for (a, b2), c in ec.items():
+        if c == 1:
+            ring[a] = ring[b2] = True
+    rv = ring[used] & (cut[used] > -1e8) & (Vr[:, 2] < cut[used] + 0.06)
+    Vr[rv, 2] = cut[used][rv]       # 裾の輪(境界)を水平に揃える
     cw = WF[used]
     cl = dict(faces=[[(int(rm[i]), -1) for i in f] for f in F[keep]], vt=np.zeros((1, 2)), license="procedural", author="procedural", name=name, path=f"procedural/{name}", tex=None)
     return dict(slot=name, name=name, Vrest=Vr, V=H.skin(Vr, rf["rest_bone_poses"], rf["bone_poses"], cw), cw=cw, cl=cl, mat=color, uv=False)
@@ -151,6 +181,61 @@ def _merge(parts):
     return np.vstack(V), T
 
 
+def phone(rf, color="black"):
+    """スマホ: 右手の指の向きに沿った薄い箱(手に追従して回転)"""
+    L = H.model("anny").bone_labels
+    r = rf["rest_bone_poses"]
+    h, m2 = r[L.index("hand_r")][:3, 3], r[L.index("middle_02_r")][:3, 3]
+    d = m2 - h
+    d /= np.linalg.norm(d)
+    side = np.array([1.0, 0.0, 0.0]) - d * d[0]
+    side /= np.linalg.norm(side)
+    th = np.cross(d, side)
+    c = h + d * 0.045
+    hl, hw, ht = 0.0725, 0.036, 0.005
+    V = np.array([c + a * d * hl + b * side * hw + e * th * ht for a in (-1, 1) for b in (-1, 1) for e in (-1, 1)])
+    q = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+    T = [t for a, b, c2, d2 in q for t in ((a, b, c2), (a, c2, d2))]
+    return _mesh_piece(rf, "phone", V, T, "hand_r", color)
+
+
+def glasses(rf, color="black"):
+    """眼鏡: 両目の位置に楕円リム+ブリッジ+つる。頭に追従"""
+    hi = _head_info(rf)
+    V = rf["rest_vertices"]
+    F = H.model("anny").faces.numpy()
+    parts = np.array(H._PARTS)
+    cs = []
+    for sd in ("L", "R"):
+        sel = F[parts == f"eye_front.{sd}"]
+        cs.append(V[np.unique(sel)].mean(0))
+    n = np.array([0.0, -1.0, 0.0])
+    pts, tris = [], []
+    for c in cs:
+        c = c + n * 0.016
+        o = len(pts)
+        for k in range(14):
+            a = 2 * math.pi * k / 14
+            for rr in (0.021, 0.0245):
+                pts.append(c + np.array([rr * math.cos(a), 0.0, rr * 0.78 * math.sin(a)]))
+        for k in range(14):
+            i0, i1 = o + 2 * k, o + 2 * ((k + 1) % 14)
+            tris += [(i0, i0 + 1, i1 + 1), (i0, i1 + 1, i1)]
+    o = len(pts)
+    a, b = cs[0] + n * 0.016 + np.array([-0.0245, 0, 0.004]), cs[1] + n * 0.016 + np.array([0.0245, 0, 0.004])
+    for e in (a, b):
+        for dz in (0.0, 0.004):
+            pts.append(e + np.array([0, 0, dz]))
+    tris += [(o, o + 1, o + 3), (o, o + 3, o + 2)]
+    for sd, c in ((1, cs[0]), (-1, cs[1])):
+        p0 = c + n * 0.016 + np.array([sd * 0.0245, 0, 0.0])
+        p1 = c + np.array([sd * 0.077, 0.075, 0.0])
+        o = len(pts)
+        pts += [p0, p0 + np.array([0, 0, 0.003]), p1, p1 + np.array([0, 0, 0.003])]
+        tris += [(o, o + 1, o + 3), (o, o + 3, o + 2)]
+    return _mesh_piece(rf, "glasses", np.array(pts), tris, "head", color)
+
+
 def backpack(rf, color):
     r = rf["rest_bone_poses"]
     L = H.model("anny").bone_labels
@@ -192,7 +277,7 @@ def umbrella(rf, color, closed=False):
 def bag(rf, color):
     L = H.model("anny").bone_labels
     h = rf["rest_bone_poses"][L.index("hand_r")][:3, 3]
-    V, T = _box((h[0], h[1], h[2] - 0.17), (0.34, 0.12, 0.28))
+    V, T = _box((h[0], h[1], h[2] - 0.15), (0.27, 0.085, 0.2))
     return _mesh_piece(rf, "bag", V, T, "hand_r", color, follow="pos")
 
 
@@ -303,7 +388,7 @@ def make_outfit(spec, rng):
     col = lambda *c: rng.choice(c)
     casual = ["white", "black", "navy", "gray", "beige", "red", "olive", "blue", "pink", "mustard", "brown", "khaki", "cream", "lightblue", "darkgreen", "purple", "orange"]
     dark = ["navy", "black", "gray", "beige", "olive", "brown", "khaki", "blue"]
-    top = lambda c: pcs.append(("mh", "top", _pick(rng, "top_f" if f else "top_m"), c, 0.022))
+    top = lambda c: pcs.append(("mh", "top", _pick(rng, "top_f" if f else "top_m"), c, 0.014))
     if g == "office":
         if rng.random() < 0.55:
             pcs.append(("mh", "suit", _pick(rng, "suit_f" if f else "suit_m"), col("navy", "black", "gray"), 0.014))
@@ -325,7 +410,7 @@ def make_outfit(spec, rng):
         if rng.random() < 0.65:
             pcs.append(("rigid", "backpack", None, col("black", "navy", "gray", "blue"), 0))
     elif g == "worker":
-        pcs.append(("garment", "coverall", dict(zlo=0.52, arms="long", legs="full", legz=0.04, margin=0.016), col("navy", "khaki", "gray", "olive", "blue"), 0))
+        pcs.append(("garment", "coverall", dict(zlo=0.30, arms="long", legs="full", legz=0.04, margin=0.016), col("navy", "khaki", "gray", "olive", "blue"), 0))
         if rng.random() < 0.7:
             pcs.append(("rigid", "helmet", None, col("white", "white", "yellow", "orange"), 0))
     elif g == "elder":
@@ -367,6 +452,8 @@ def make_outfit(spec, rng):
             pcs.append(("rigid", "backpack", None, col("black", "navy", "gray", "olive"), 0))
     if rng.random() < (0.09 if g != "worker" else 0.15):
         pcs.append(("mh", "mask", _pick(rng, "mask"), col("white", "white", "lightblue", "gray"), 0.004))
+    if rng.random() < (0.30 if yr > 55 else 0.17):
+        pcs.append(("rigid", "glasses", None, col("black", "black", "brown", "gray"), 0))
     r3 = rng.random()
     if r3 < 0.12 and not any(p[1] == "backpack" for p in pcs):
         pcs.append(("rigid", "umbrella", None, col("navy", "black", "red", "beige", "darkgreen", "lightblue"), 0))
@@ -448,6 +535,24 @@ def decals(rf, cloth, rng, group, years):
     return out
 
 
+def tuck_waist(rf, cloth):
+    """トップスの裾より上にあるボトムスの頂点を体に密着させる(ゆったりパンツのウエストがトップスを突き破らない)"""
+    from scipy.spatial import cKDTree
+    top = next((c for c in cloth if c["slot"] == "top"), None)
+    bot = next((c for c in cloth if c["slot"] == "bottom"), None)
+    if top is None or bot is None or any(c["slot"] in ("jacket", "blazer", "coat", "coverall", "suit", "dress") for c in cloth):
+        return
+    zh = np.percentile(top["Vrest"][:, 2], 4)
+    V = bot["Vrest"]
+    Vb = rf["rest_vertices"]
+    nb = H._vnormals(Vb, H.model("anny").faces.numpy())
+    _, j = cKDTree(Vb).query(V)
+    w = np.clip((V[:, 2] - (zh - 0.07)) / 0.05, 0.0, 1.0)[:, None]
+    V2 = V * (1 - w) + (Vb[j] + nb[j] * 0.004) * w
+    bot["Vrest"] = V2
+    bot["V"] = H.skin(V2, rf["rest_bone_poses"], rf["bone_poses"], bot["cw"])
+
+
 def build_pieces(rf, pieces, rb=None, topology="anny"):
     """rf=フル解像度の体(MakeHuman アセット・小物用)、rb=体メッシュ側の run 結果(衣服の押し出し用。低ポリのとき衣服も低ポリになる)"""
     rb = rf if rb is None else rb
@@ -458,5 +563,6 @@ def build_pieces(rf, pieces, rb=None, topology="anny"):
         elif kind == "garment":
             out.append(garment(rb, slot, color=color, topology=topology, **arg))
         else:
-            out.append(dict(backpack=backpack, helmet=helmet, umbrella=umbrella, bag=bag)[slot](rf, color))
+            out.append(dict(backpack=backpack, helmet=helmet, umbrella=umbrella, bag=bag, glasses=glasses)[slot](rf, color))
+    tuck_waist(rf, out)
     return out

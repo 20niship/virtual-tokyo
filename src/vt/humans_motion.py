@@ -69,6 +69,10 @@ def retarget_ual(clip, speed=1.0, amp=1.0, npz=None):
     T = (Hd[:, L.index("pelvis")] - ref_h[L.index("pelvis")]) * scale
     T = (Yc @ T.T).T
     n = len(P)
+    if clip not in ("Interact",) and n > 4:
+        dots = np.abs((Rot.from_matrix(P[0].reshape(-1, 3, 3)).as_quat() * Rot.from_matrix(P[-1].reshape(-1, 3, 3)).as_quat()).sum(-1))
+        if dots.min() > 0.999:        # 末尾フレームが先頭と同じ(ループ素材の重複)なら捨てて、ループの継ぎ目の止まりを無くす
+            P, T, n = P[:-1], T[:-1], n - 1
     if speed != 1.0:
         k = max(2, int(round(n / speed)))
         src = np.linspace(0, n - 1, k)

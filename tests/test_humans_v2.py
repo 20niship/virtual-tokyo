@@ -72,7 +72,7 @@ def test_decimate_reduces_and_keeps_triangles():
     V = np.c_[g, np.zeros(len(g))]
     F = [[i * 20 + j, i * 20 + j + 1, (i + 1) * 20 + j + 1, (i + 1) * 20 + j] for i in range(19) for j in range(19)]
     V2, T = H.decimate(V, F, 0.012)
-    assert len(V2) < len(V) / 4 and all(len(set(t)) == 3 for t in T)
+    assert len(V2) < len(V) / 2 and all(len(set(t)) == 3 for t in T)
 
 
 @needs_pk

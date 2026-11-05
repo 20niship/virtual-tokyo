@@ -496,6 +496,16 @@ def decimate(V, faces, cell=0.012):
     """頂点クラスタリングによる簡易間引き(cell[m] の格子ごとに頂点を平均)。faces は頂点番号のリスト(多角形可)。戻り: (V2, tris)"""
     V = np.asarray(V)
     key = np.floor(V / cell).astype(np.int64)
+    use = {}
+    for f in faces:
+        for a, b in zip(f, list(f[1:]) + [f[0]]):
+            k = (a, b) if a < b else (b, a)
+            use[k] = use.get(k, 0) + 1
+    bd = np.zeros(len(V), np.int64)
+    for (a, b), c in use.items():
+        if c == 1:          # 境界(裾・袖口・襟)の頂点は間引かない。裾がギザギザにならない
+            bd[a] = bd[b] = 1
+    key = np.c_[key, np.where(bd > 0, np.arange(len(V)) + 1, 0)]
     _, inv = np.unique(key, axis=0, return_inverse=True)
     inv = inv.reshape(-1)
     n = inv.max() + 1
