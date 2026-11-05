@@ -213,7 +213,15 @@ def _textured(nt, bsdf, d, base, texc, objinfo):
             bp = N("ShaderNodeBump"); bp.inputs["Strength"].default_value = min(1.0, d["bump"] * 0.5); bp.inputs["Distance"].default_value = 0.02
             if REAL and d["tex"].startswith(("roof_", "corrugated", "siding_", "cmu_", "riprap", "steel_rusty")):    # 瓦・波板・サイディング・ブロック・石積みは凹凸を深く(近景の陰影)
                 bp.inputs["Strength"].default_value = min(1.0, d["bump"] * 0.8); bp.inputs["Distance"].default_value = 0.05
-            L(bw.outputs[0], bp.inputs["Height"]); L(bp.outputs[0], bsdf.inputs["Normal"])
+            hsrc = bw.outputs[0]
+            if d.get("hmap"):          # 樹皮: 専用の高さ画像でノーマル(深い裂け目)と粗さ(凹部ほど粗い)を作る
+                hi = N("ShaderNodeTexImage"); hi.image = _image(d["hmap"], True); hi.extension = "REPEAT"
+                L(mapping(d["size"]).outputs[0], hi.inputs["Vector"])
+                hsrc = hi.outputs["Color"]
+                bp.inputs["Strength"].default_value = 1.0; bp.inputs["Distance"].default_value = 0.035
+                rm = N("ShaderNodeMapRange"); rm.inputs[3].default_value = d["rough"] + 0.08; rm.inputs[4].default_value = max(0.4, d["rough"] - 0.3)
+                L(hi.outputs["Color"], rm.inputs[0]); L(rm.outputs[0], bsdf.inputs["Roughness"])
+            L(hsrc, bp.inputs["Height"]); L(bp.outputs[0], bsdf.inputs["Normal"])
         # 汚れ・濃淡(低周波)で色ムラ
         nz = N("ShaderNodeTexNoise"); nz.inputs["Scale"].default_value = 0.35; nz.inputs["Detail"].default_value = 4
         L(texc.outputs["Object"], nz.inputs["Vector"])
@@ -241,7 +249,8 @@ def _textured(nt, bsdf, d, base, texc, objinfo):
             L(cr.outputs[0], mu.inputs[0]); alpha = mu.outputs[0]
     if alpha is not None:
         L(alpha, bsdf.inputs["Alpha"])
-    bsdf.inputs["Roughness"].default_value = d["rough"]
+    if not d.get("hmap"):
+        bsdf.inputs["Roughness"].default_value = d["rough"]
     bsdf.inputs["Metallic"].default_value = d["metal"]
 
 
@@ -258,7 +267,15 @@ def _foliage(nt, out, bsdf, d, texc):
     hs.inputs["Saturation"].default_value = 1.2
     L(attr.outputs["Fac"], hm.inputs[0]); L(attr.outputs["Fac"], vm.inputs[0])
     L(hm.outputs[0], hs.inputs["Hue"]); L(vm.outputs[0], hs.inputs["Value"])
-    L(img.outputs["Color"], hs.inputs["Color"])
+    # 葉塊ごとの色むら: オブジェクト座標の低周波ノイズで明度/色相を揺らす(同じ木の中でも日向と日陰/若葉と古葉)
+    texc2 = N("ShaderNodeTexCoord")
+    nz = N("ShaderNodeTexNoise"); nz.inputs["Scale"].default_value = 0.9; nz.inputs["Detail"].default_value = 2.0
+    L(texc2.outputs["Object"], nz.inputs["Vector"])
+    nm = N("ShaderNodeMix"); nm.data_type = "RGBA"; nm.blend_type = "MULTIPLY"; nm.inputs[0].default_value = 0.55
+    tint = N("ShaderNodeValToRGB")
+    tint.color_ramp.elements[0].color = (0.62, 0.7, 0.45, 1); tint.color_ramp.elements[1].color = (1.0, 0.96, 0.78, 1)
+    L(nz.outputs["Fac"], tint.inputs[0]); L(tint.outputs[0], nm.inputs[7]); L(img.outputs["Color"], nm.inputs[6])
+    L(nm.outputs[2], hs.inputs["Color"])
     cut = N("ShaderNodeMath"); cut.operation = "GREATER_THAN"; cut.inputs[1].default_value = d.get("cutout", 0.45)
     L(img.outputs["Alpha"], cut.inputs[0])
     L(hs.outputs["Color"], bsdf.inputs["Base Color"])
@@ -266,7 +283,9 @@ def _foliage(nt, out, bsdf, d, texc):
     tr = N("ShaderNodeBsdfTranslucent")
     L(hs.outputs["Color"], tr.inputs["Color"])
     mx = N("ShaderNodeMixShader")
-    mx.inputs[0].default_value = 0.35
+    geo = N("ShaderNodeNewGeometry")                     # 裏面ほど透過光(Translucent)を強く: 逆光で葉が黄緑に透ける
+    bk = N("ShaderNodeMath"); bk.operation = "MULTIPLY_ADD"; bk.inputs[1].default_value = 0.25; bk.inputs[2].default_value = 0.25
+    L(geo.outputs["Backfacing"], bk.inputs[0]); L(bk.outputs[0], mx.inputs[0])
     L(bsdf.outputs[0], mx.inputs[1]); L(tr.outputs[0], mx.inputs[2])
     tp = N("ShaderNodeBsdfTransparent")
     cutmix = N("ShaderNodeMixShader")                 # alpha=0の所は完全に透明(影も落とさない)

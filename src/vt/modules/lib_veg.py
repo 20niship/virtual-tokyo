@@ -85,3 +85,14 @@ def _tree_ring(m, W, H, rng):         # 縁石の丸い植樹桝(土入り)
 
 reg("veg_tree_pit_grating", _tree_pit, W=1.2, H=0.05, cat=CAT)
 reg("veg_tree_ring_curb", _tree_ring, W=1.4, H=0.2, cat=CAT)
+
+
+def _litter(kind, seed):
+    """落ち葉の平置きデカール(3m角、地面+1cm)。葉は季節色(y=黄/r=赤橙/b=枯葉/g=青葉)に染めたテクスチャ。インスタンスで樹下・歩道に散らす"""
+    def fn(m, W, H, rng):
+        m.poly([(-1.5, -1.5, 0.012), (1.5, -1.5, 0.012), (1.5, 1.5, 0.012), (-1.5, 1.5, 0.012)], f"veg_litter_{kind}", [(0, 0), (1, 0), (1, 1), (0, 1)])
+    return fn
+
+
+for _k in "yrbg":
+    reg(f"veg_litter_{_k}", _litter(_k, 0), W=3.0, H=0.02, cat=CAT)

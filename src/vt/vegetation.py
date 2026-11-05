@@ -91,10 +91,28 @@ class Veg:
         if self.put(self.mod(sp, sz), x, y, scale=scale):
             self.occ.add(x, y, r_clear)
             self.n_tree += 1
+            self.litter(sp, x, y, r_clear)
             if pit:
                 self.put("veg_tree_pit_grating", x, y, 0.0, jitter=False)
             return True
         return False
+
+    LITTER = {"ichou": "y", "keyaki": "y", "platanus": "y", "sakura": "r", "tokaikaede": "r", "hanamizuki": "r", "kusunoki": "b", "shii": "b", "kuromatsu": "b"}
+    # 季節 → 1本あたりの落ち葉デカール数(秋〜冬に多い。春は花びら/新芽の殻で少なめ、夏は青葉がわずか)
+    LITTER_N = {"autumn_y": 4, "autumn_r": 4, "winter": 3, "spring": 1, "summer": 0.5}
+
+    def litter(self, sp, x, y, r):
+        """樹下(歩道・地面)に落ち葉デカールをインスタンス配置。道路上には置かない"""
+        k = self.LITTER.get(sp)
+        n = self.LITTER_N.get(self.season, 0.5)
+        if k is None or not n:
+            return
+        k = "b" if self.season == "winter" else ("g" if self.season == "summer" else k)
+        for _ in range(int(n) + (1 if self.rng.random() < n % 1 else 0)):
+            a, d = self.rng.uniform(0, 6.28), self.rng.uniform(0.2, 0.9) * r
+            px, py = x + math.cos(a) * d, y + math.sin(a) * d
+            if not self.cw.contains(Point(px, py)) and (self.land.contains(Point(px, py)) or (self.swp is not None and self.swp.contains(Point(px, py)))):
+                self.put(f"veg_litter_{k}", px, py, scale=self.rng.uniform(0.8, 1.5))
 
     def species_for(self, tags, ctx):
         t = " ".join(str(tags.get(k, "")) for k in ("genus", "species", "species:ja", "name", "taxon")).lower()

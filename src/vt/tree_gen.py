@@ -119,23 +119,27 @@ class Spec:
         self.__dict__.update(dict(
             bark="bark_furrow", girth=1.0, crown="ovoid", crown_w=0.42, crown_base=0.3, n_main=14, ang=45, ang_var=15, grav=0.1, up=0.06,
             sub=4, sub_ang=45, decay=0.62, noise=0.12, lean=0.0, twist=0.0, leaf="oval", leaf_size=0.17, shell=130, twigs=3, seasons=("summer",),
-            trunk_noise=0.05, flare=0.7, evergreen=False, trunk_taper=0.3))
+            trunk_noise=0.05, flare=0.7, evergreen=False, trunk_taper=0.3, leaf_m=0.55, tip_m=0.4, dens=1.5, roots=5))
         self.__dict__.update(kw)
 
 
 SPECIES = {
-    "ichou": Spec(bark="bark_furrow", crown="cone", crown_w=0.36, crown_base=0.28, n_main=16, ang=42, ang_var=14, grav=0.04, up=0.12, leaf="ginkgo", leaf_size=0.095,
-                  seasons=("summer", "autumn_y", "spring", "winter"), shell=110),
-    "keyaki": Spec(bark="bark_furrow", crown="vase", crown_w=0.5, crown_base=0.32, n_main=11, ang=34, ang_var=12, grav=0.0, up=0.18, leaf="oval", leaf_size=0.15,
-                   seasons=("summer", "autumn_y", "spring", "winter"), shell=140, sub=5),
+    # イチョウ: 円錐形(中心の主幹+上向きに短く出る枝)
+    "ichou": Spec(bark="bark_furrow", crown="cone", crown_w=0.3, crown_base=0.22, n_main=18, ang=36, ang_var=12, grav=0.03, up=0.14, leaf="ginkgo", leaf_size=0.095,
+                  seasons=("summer", "autumn_y", "spring", "winter"), shell=110, leaf_m=0.34, tip_m=0.3, dens=2.0, trunk_taper=0.18),
+    # ケヤキ: ほうき状(低い位置で幹が分かれ、細い枝が上向きに扇状に広がる)
+    "keyaki": Spec(bark="bark_furrow", crown="vase", crown_w=0.46, crown_base=0.26, n_main=15, ang=24, ang_var=9, grav=-0.02, up=0.26, leaf="oval", leaf_size=0.15,
+                   seasons=("summer", "autumn_y", "spring", "winter"), shell=140, sub=5, leaf_m=0.46, tip_m=0.36, trunk_taper=0.22, flare=0.9),
     "platanus": Spec(bark="bark_plane", crown="ovoid", crown_w=0.46, crown_base=0.35, n_main=12, ang=50, ang_var=14, grav=0.05, up=0.05, leaf="lobed", leaf_size=0.2,
-                     seasons=("summer", "autumn_y", "spring", "winter"), shell=130),
-    "sakura": Spec(bark="bark_smooth", crown="spread", crown_w=0.62, crown_base=0.28, n_main=9, ang=62, ang_var=14, grav=0.1, up=0.02, leaf="oval", leaf_size=0.14,
-                   seasons=("spring", "summer", "autumn_r", "winter"), shell=150, sub=5, girth=0.9),
-    "kusunoki": Spec(bark="bark_furrow_dark", crown="dome", crown_w=0.62, crown_base=0.3, n_main=10, ang=52, ang_var=14, grav=0.06, up=0.08, leaf="evergreen", leaf_size=0.18,
-                     evergreen=True, shell=200, girth=1.25),
+                     seasons=("summer", "autumn_y", "spring", "winter"), shell=130, leaf_m=0.6, tip_m=0.45),
+    # サクラ: 低く横に張り出す傘状(枝が水平に近く、先がやや垂れる)
+    "sakura": Spec(bark="bark_smooth", crown="spread", crown_w=0.78, crown_base=0.2, n_main=10, ang=72, ang_var=12, grav=0.14, up=0.0, leaf="oval", leaf_size=0.14,
+                   seasons=("spring", "summer", "autumn_r", "winter"), shell=150, sub=5, girth=0.95, leaf_m=0.42, tip_m=0.34, lean=0.15, trunk_taper=0.4),
+    # クスノキ: 太い幹+丸く大きな樹冠(低い位置から太い枝が四方へ)
+    "kusunoki": Spec(bark="bark_furrow_dark", crown="dome", crown_w=0.7, crown_base=0.2, n_main=12, ang=56, ang_var=14, grav=0.05, up=0.1, leaf="evergreen", leaf_size=0.18,
+                     evergreen=True, shell=200, girth=1.55, leaf_m=0.6, tip_m=0.45, flare=1.1, roots=7, trunk_taper=0.4),
     "shii": Spec(bark="bark_smooth", crown="dome", crown_w=0.5, crown_base=0.25, n_main=10, ang=45, ang_var=14, grav=0.04, up=0.08, leaf="evergreen", leaf_size=0.15,
-                 evergreen=True, shell=190, girth=1.1),
+                 evergreen=True, shell=190, girth=1.1, leaf_m=0.5, tip_m=0.4),
     "tokaikaede": Spec(bark="bark_smooth", crown="ovoid", crown_w=0.46, crown_base=0.3, n_main=9, ang=50, ang_var=14, grav=0.03, up=0.1, leaf="lobed", leaf_size=0.15,
                        seasons=("summer", "autumn_r", "spring", "winter"), shell=110, girth=0.85),
     "hanamizuki": Spec(bark="bark_smooth", crown="spread", crown_w=0.5, crown_base=0.3, n_main=8, ang=58, ang_var=12, grav=0.06, up=0.02, leaf="oval", leaf_size=0.12,
@@ -166,7 +170,7 @@ def grow_branch(rng, p0, d0, length, r0, spec, level, step=0.5, g_scale=1.0):
         p = p + d * st
         t = (i + 1) / n
         nodes.append(p.copy())
-        rad.append(max(r0 * (1 - 0.82 * t), 0.004))
+        rad.append(max(r0 * (1 - t) ** 0.8 * 0.92 + 0.004, 0.004))
     return nodes, rad
 
 
@@ -189,7 +193,15 @@ def build_tree(name, H=9.0, seed=0, season="summer"):
         tr.append(r0 * (1 - (1 - sp.trunk_taper) * t ** 0.8) * base_flare)
     ztop = trunk[-1][2]
     # 幹の上は枝へ移行するので半径を絞る
-    tube(m, trunk, tr, sp.bark, 8, 1.0, False)
+    tr = [r * (1 + 0.05 * math.sin(i * 1.7 + seed)) for i, r in enumerate(tr)]          # 幹の太さの揺らぎ
+    tube(m, trunk, tr, sp.bark, 10 if r0 > 0.12 else 8, 1.0, False)
+    for k in range(sp.roots):                                                       # 根張り: 幹の根元から放射状に地面へ潜る板根
+        a = 2 * math.pi * k / sp.roots + rng.uniform(-0.3, 0.3)
+        e = np.array([math.cos(a), math.sin(a), 0.0])
+        Lr = r0 * rng.uniform(2.6, 4.0)
+        rb = r0 * 0.34 * sp.flare ** 0.5
+        tube(m, [e * Lr + np.array([0, 0, -0.08]), e * Lr * 0.6 + np.array([0, 0, 0.03]), e * r0 * 1.15 + np.array([0, 0, 0.3]), e * r0 * 0.8 + np.array([0, 0, 0.75])],
+             [0.02, rb * 0.55, rb, rb * 0.5], sp.bark, 5, 1.0)
     tips = []                                                   # (pos, dir, level)
     crown_r = sp.crown_w * H
     h0 = sp.crown_base * H
@@ -209,6 +221,25 @@ def build_tree(name, H=9.0, seed=0, season="summer"):
     golden = math.radians(137.5)
     az0 = rng.uniform(0, 6.28)
     branches = []
+
+    def spawn(nodes, rad, L, level, sd):
+        """再帰的な分岐: 親枝の途中から子枝(角度・長さ・太さを親から継承して先細り)。level 1=主枝 → 2=側枝 → 3=小枝(葉の付く先端)"""
+        if len(nodes) >= 3 and level <= 2:
+            for _ in range(sp.sub + int(rng.integers(0, 2)) if level == 1 else sp.twigs):
+                ti = rng.uniform(0.28, 0.92) if level == 1 else rng.uniform(0.15, 0.95)
+                idx = max(1, min(len(nodes) - 2, int(ti * (len(nodes) - 1))))
+                pdir = norm(nodes[idx + 1] - nodes[idx - 1])
+                sa = math.radians((sp.sub_ang if level == 1 else rng.uniform(30, 65)) + rng.normal(0, 12))
+                sdir = rot_about(pdir, rot_about(perp(pdir), pdir, rng.uniform(0, 6.28)), sa)
+                if level == 1:
+                    Lc, rc, step = L * (1 - ti) * sp.decay * rng.uniform(0.8, 1.2) + 0.5, max(0.008, rad[idx] * 0.55), 0.45
+                else:
+                    Lc, rc, step = rng.uniform(0.4, 0.9) * max(0.6, H / 9), max(0.005, rad[idx] * 0.6), 0.35
+                cn, cr = trim(*grow_branch(rng, nodes[idx], sdir, Lc, rc, sp, level + 1, step=step))
+                branches.append((cn, cr, level + 1, Lc))
+                spawn(cn, cr, Lc, level + 1, sdir)
+        tips.append((nodes[-1], norm(nodes[-1] - nodes[-2]), level))
+
     for i in range(sp.n_main):
         t = (i + 0.5) / sp.n_main
         z = h0 + (H * 0.92 - h0) * t ** 0.9
@@ -222,28 +253,7 @@ def build_tree(name, H=9.0, seed=0, season="summer"):
         rb = max(0.015, r0 * 0.5 * (1 - 0.55 * t))
         nodes, rad = trim(*grow_branch(rng, base, d0, L, rb, sp, 1, step=max(0.45, H / 20)))
         branches.append((nodes, rad, 1, L))
-        # 側枝
-        nsub = (sp.sub + int(rng.integers(0, 2))) if len(nodes) >= 3 else 0
-        for s in range(nsub):
-            ti = rng.uniform(0.28, 0.92)
-            idx = max(1, min(len(nodes) - 2, int(ti * (len(nodes) - 1))))
-            pdir = norm(nodes[idx + 1] - nodes[idx - 1])
-            sa = math.radians(sp.sub_ang + rng.normal(0, 12))
-            az2 = rng.uniform(0, 6.28)
-            ax = perp(pdir)
-            sd = rot_about(pdir, rot_about(ax, pdir, az2), sa)
-            Ls = L * (1 - ti) * sp.decay * rng.uniform(0.8, 1.2) + 0.5
-            rs = max(0.008, rad[idx] * 0.55)
-            sn, sr = trim(*grow_branch(rng, nodes[idx], sd, Ls, rs, sp, 2, step=0.45))
-            branches.append((sn, sr, 2, Ls))
-            for tw in range(sp.twigs):
-                tj = int(rng.integers(1, max(2, len(sn) - 1)))
-                tdir = rot_about(norm(sn[min(tj + 1, len(sn) - 1)] - sn[tj - 1]), rot_about(perp(sd), sd, rng.uniform(0, 6.28)), math.radians(rng.uniform(30, 65)))
-                tn, tr2 = trim(*grow_branch(rng, sn[tj], tdir, rng.uniform(0.4, 0.9) * max(0.6, H / 9), 0.006, sp, 3, step=0.35))
-                branches.append((tn, tr2, 3, 0.6))
-                tips.append((tn[-1], norm(tn[-1] - tn[-2]), 3))
-            tips.append((sn[-1], norm(sn[-1] - sn[-2]), 2))
-        tips.append((nodes[-1], norm(nodes[-1] - nodes[-2]), 1))
+        spawn(nodes, rad, L, 1, d0)
     # 枝チューブ(細い小枝は冬だけ)
     for nodes, rad, lvl, L in branches:
         if lvl == 3 and not winter:
@@ -257,37 +267,35 @@ def build_tree(name, H=9.0, seed=0, season="summer"):
     if season == "spring" and sp.leaf in ("oval",) and name in ("sakura",):
         cl_pool = pool("sakura_bloom") + pool("sakura_mixed")
         tw_pool = cl_pool
-    ls = sp.leaf_size * H
+    # 葉は実寸(葉クラスター=小枝+複数の葉のαカード 0.3〜0.7m)。大きさは樹高によらず一定、数を樹冠表面積に比例させて増やす
+    lm = sp.leaf_m * (0.9 + 0.1 * H / 9.0)
     for pos, dr, lvl in tips:
         if pos[2] > H * 1.06 or math.hypot(pos[0], pos[1]) > r_allowed(pos[2]) * 1.35 + 0.4:
             continue                                            # 樹冠の外へはみ出した枝先は葉を付けない
         nm = tw_pool[int(rng.integers(len(tw_pool)))]
         up = dr
         right = norm(np.cross(up, rot_about(perp(up), up, rng.uniform(0, 6.28))))
-        asp = card_aspect(nm)
-        h = ls * rng.uniform(0.8, 1.1)
+        h = sp.tip_m * rng.uniform(0.8, 1.15)
         if "twig" in nm or "ginkgo" in nm:
-            card(m, nm, pos + up * h * 0.45, right, up, h * asp, h, flip=rng.random() < 0.5)
+            card(m, nm, pos + up * h * 0.45, right, up, h * card_aspect(nm), h, flip=rng.random() < 0.5)
         else:
-            card(m, nm, pos, right, up, h * 1.25, h * 1.25, flip=rng.random() < 0.5)
-            card(m, nm, pos, norm(np.cross(up, right)), up, h * 1.25, h * 1.25, flip=rng.random() < 0.5)
-    # 樹冠外殻: 包絡面に外向きの葉塊カード(密度と輪郭を作る)
-    for i in range(sp.shell):
+            card(m, nm, pos, right, up, h, h, flip=rng.random() < 0.5)
+    # 樹冠外殻+内部: 包絡面付近に外向きの葉クラスターカード(密度と輪郭を作る)
+    n_shell = int(min(2300, max(sp.shell, sp.dens * 2.4 * math.pi * crown_r ** 2 / (lm * lm * 0.5) * 0.6)))
+    for i in range(n_shell):
         t = rng.uniform(0.02, 1.0) ** 0.8
         z = h0 + (H * 1.0 - h0) * t
         ra = r_allowed(z)
         if ra < 0.2:
             continue
         az = rng.uniform(0, 6.28)
-        rr = ra * (rng.uniform(0.55, 1.0) if t < 0.85 else rng.uniform(0.0, 0.8))
+        rr = ra * (rng.uniform(0.35, 1.0) if t < 0.85 else rng.uniform(0.0, 0.8))
         c = np.array([math.cos(az) * rr, math.sin(az) * rr, z]) + trunk[min(int(z / (H * 0.9 / n_t)), n_t)] * np.array([1, 1, 0])
         out = norm(np.array([math.cos(az), math.sin(az), 0.05 + 0.75 * t]))                  # 下は外向き、上ほど上向き(樹冠の頂部を覆う)
         nm = cl_pool[int(rng.integers(len(cl_pool)))]
-        sz = ls * rng.uniform(1.7, 2.6)
+        sz = lm * rng.uniform(0.75, 1.3)
         right = norm(np.cross(out, np.array([0, 0, 1.0]))) if abs(out[2]) < 0.9 else np.array([1.0, 0, 0])
-        up = norm(np.cross(right, out))
-        # カードの面は外向き(out)に直交しつつ、少し傾ける
-        right = rot_about(right, out, rng.uniform(-0.6, 0.6))
+        right = rot_about(right, out, rng.uniform(-0.9, 0.9))
         up = norm(np.cross(out, right))
         card(m, nm, c, right, up, sz, sz, flip=rng.random() < 0.5)
     return m, dict(W=crown_r * 2.1, H=H + 1)
