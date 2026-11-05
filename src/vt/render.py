@@ -339,13 +339,17 @@ def _foliage(nt, out, bsdf, d, texc):
     L(nm.outputs[2], hs.inputs["Color"])
     cut = N("ShaderNodeMath"); cut.operation = "GREATER_THAN"; cut.inputs[1].default_value = d.get("cutout", 0.45)
     L(img.outputs["Alpha"], cut.inputs[0])
-    L(hs.outputs["Color"], bsdf.inputs["Base Color"])
+    bc = N("ShaderNodeMix"); bc.data_type = "RGBA"; bc.blend_type = "MULTIPLY"; bc.inputs[0].default_value = 1.0
+    bc.inputs[7].default_value = (0.88, 0.88, 0.84, 1)                          # 葉の反射率上限(アトラスの明るい画素が白く飛ばない)
+    L(hs.outputs["Color"], bc.inputs[6]); L(bc.outputs[2], bsdf.inputs["Base Color"])
     bsdf.inputs["Roughness"].default_value = d["rough"]
     tr = N("ShaderNodeBsdfTranslucent")
-    L(hs.outputs["Color"], tr.inputs["Color"])
+    tcol = N("ShaderNodeMix"); tcol.data_type = "RGBA"; tcol.blend_type = "MULTIPLY"; tcol.inputs[0].default_value = 1.0   # 透過色は葉色の暗め・彩度維持(白飛び防止)
+    tcol.inputs[7].default_value = (0.55, 0.65, 0.3, 1)
+    L(hs.outputs["Color"], tcol.inputs[6]); L(tcol.outputs[2], tr.inputs["Color"])
     mx = N("ShaderNodeMixShader")
     geo = N("ShaderNodeNewGeometry")                     # 裏面ほど透過光(Translucent)を強く: 逆光で葉が黄緑に透ける
-    bk = N("ShaderNodeMath"); bk.operation = "MULTIPLY_ADD"; bk.inputs[1].default_value = 0.25; bk.inputs[2].default_value = 0.25
+    bk = N("ShaderNodeMath"); bk.operation = "MULTIPLY_ADD"; bk.inputs[1].default_value = 0.15; bk.inputs[2].default_value = 0.2       # 透過光の割合は最大0.35にクランプ
     L(geo.outputs["Backfacing"], bk.inputs[0]); L(bk.outputs[0], mx.inputs[0])
     L(bsdf.outputs[0], mx.inputs[1]); L(tr.outputs[0], mx.inputs[2])
     tp = N("ShaderNodeBsdfTransparent")
