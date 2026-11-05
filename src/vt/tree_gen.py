@@ -176,7 +176,7 @@ def grow_branch(rng, p0, d0, length, r0, spec, level, step=0.5, g_scale=1.0):
 
 def build_tree(name, H=9.0, seed=0, season="summer"):
     sp = SPECIES[name]
-    rng = np.random.default_rng(seed * 977 + hash(name) % 997)
+    rng = np.random.default_rng(seed * 977 + sum(map(ord, name)) % 997)
     m = Mesh()
     H = float(H)
     r0 = (0.012 * H + 0.06) * sp.girth
