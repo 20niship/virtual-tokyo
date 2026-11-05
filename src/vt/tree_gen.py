@@ -282,22 +282,33 @@ def build_tree(name, H=9.0, seed=0, season="summer"):
             card(m, nm, pos, right, up, h, h, flip=rng.random() < 0.5)
     # 樹冠外殻+内部: 包絡面付近に外向きの葉クラスターカード(密度と輪郭を作る)
     n_shell = int(min(2300, max(sp.shell, sp.dens * 2.4 * math.pi * crown_r ** 2 / (lm * lm * 0.5) * 0.6)))
-    for i in range(n_shell):
-        t = rng.uniform(0.02, 1.0) ** 0.8
-        z = h0 + (H * 1.0 - h0) * t
-        ra = r_allowed(z)
-        if ra < 0.2:
-            continue
-        az = rng.uniform(0, 6.28)
-        rr = ra * (rng.uniform(0.35, 1.0) if t < 0.85 else rng.uniform(0.0, 0.8))
-        c = np.array([math.cos(az) * rr, math.sin(az) * rr, z]) + trunk[min(int(z / (H * 0.9 / n_t)), n_t)] * np.array([1, 1, 0])
-        out = norm(np.array([math.cos(az), math.sin(az), 0.05 + 0.75 * t]))                  # 下は外向き、上ほど上向き(樹冠の頂部を覆う)
+    # 枝に沿った位置の候補(側枝・小枝の節。樹冠内のみ)。クラスターの4割は枝沿い、6割は樹冠体積(外殻寄り)に散らす
+    bpts = [p for nodes, rad, lvl, L in branches if lvl >= 2 for p in nodes[1:] if p[2] > h0 * 0.8 and math.hypot(p[0], p[1]) < r_allowed(p[2]) * 1.1 + 0.3]
+    for i in range(int(n_shell * 0.85)):
+        if bpts and rng.random() < 0.4:
+            c = bpts[int(rng.integers(len(bpts)))] + rng.normal(0, lm * 0.35, 3)
+            out = norm(np.array([c[0], c[1], 0.3 * c[2] / H]) + rng.normal(0, 0.4, 3))
+        else:
+            t = rng.uniform(0.02, 1.0) ** 0.8
+            z = h0 + (H * 1.0 - h0) * t
+            ra = r_allowed(z)
+            if ra < 0.2:
+                continue
+            az = rng.uniform(0, 6.28)
+            rr = ra * (rng.uniform(0.35, 1.0) if t < 0.85 else rng.uniform(0.0, 0.8))
+            c = np.array([math.cos(az) * rr, math.sin(az) * rr, z]) + trunk[min(int(z / (H * 0.9 / n_t)), n_t)] * np.array([1, 1, 0]) + rng.normal(0, lm * 0.25, 3)
+            out = norm(np.array([math.cos(az), math.sin(az), 0.05 + 0.75 * t]))
+        # 法線: 球面一様ランダムに外向きを軽く混ぜる(同一平面に並ばない)
+        sph = norm(rng.normal(0, 1, 3))
+        nrm = norm(out * 0.35 + sph * 0.65)
+        base = rot_about(perp(nrm), nrm, rng.uniform(0, 6.28))                                # ロールも一様
+        up = norm(np.cross(nrm, base))
         nm = cl_pool[int(rng.integers(len(cl_pool)))]
-        sz = lm * rng.uniform(0.75, 1.3)
-        right = norm(np.cross(out, np.array([0, 0, 1.0]))) if abs(out[2]) < 0.9 else np.array([1.0, 0, 0])
-        right = rot_about(right, out, rng.uniform(-0.9, 0.9))
-        up = norm(np.cross(out, right))
-        card(m, nm, c, right, up, sz, sz, flip=rng.random() < 0.5)
+        sz = lm * rng.lognormal(0, 0.22) * 0.85
+        for k in range(2):                                                                     # クラスター内で小さなカードを交差(星形)に
+            r2 = rot_about(base, up, k * rng.uniform(1.0, 1.7) + rng.normal(0, 0.15))
+            u2 = rot_about(up, base, rng.normal(0, 0.35)) if k else up
+            card(m, nm, c + rng.normal(0, lm * 0.08, 3), r2, u2, sz * (1 - 0.15 * k), sz * (1 - 0.15 * k), flip=rng.random() < 0.5)
     return m, dict(W=crown_r * 2.1, H=H + 1)
 
 
