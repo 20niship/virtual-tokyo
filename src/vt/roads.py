@@ -262,7 +262,7 @@ def _curb_faces(mesh, piece, cw, zf, h, mat="concrete_tex"):
                 mesh.oriented([(ix0, iy0, z0 + h + 0.002), (ix1, iy1, z1 + h + 0.002), (ix1 - nx * tw, iy1 - ny * tw, z1 + h + 0.002), (ix0 - nx * tw, iy0 - ny * tw, z0 + h + 0.002)],
                               (0, 0, 1), "curb_top", [(0, 0), (L, 0), (L, tw), (0, tw)])
                 gw = 0.3
-                mesh.oriented([(x0, y0, z0 + 0.012), (x1, y1, z1 + 0.012), (x1 + nx * gw, y1 + ny * gw, z1 + 0.012), (x0 + nx * gw, y0 + ny * gw, z0 + 0.012)],
+                mesh.oriented([(x0, y0, z0 + 0.006), (x1, y1, z1 + 0.006), (x1 + nx * gw, y1 + ny * gw, z1 + 0.006), (x0 + nx * gw, y0 + ny * gw, z0 + 0.006)],
                               (0, 0, 1), "gutter_l", [(0, 0), (L, 0), (L, gw), (0, gw)])
 
 

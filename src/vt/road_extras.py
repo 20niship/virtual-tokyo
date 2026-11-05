@@ -285,7 +285,7 @@ def drainage(mesh, e, s0, s1, zf, rng, both_curb=True):
             n = max(2, int(o.length / 3))
             pts = [(o.interpolate(o.length * i / n).x, o.interpolate(o.length * i / n).y) for i in range(n + 1)]
             # 側溝は縁石沿い 0.3m 幅(道路側へ)。pathの左を+とするので、左側(side>0)は内向き=-0.15..+0.15
-            ribbon(mesh, pts, [zf(x, y) + 0.004 for x, y in pts], -0.15, 0.15, "gutter", 0.0)
+            ribbon(mesh, pts, [zf(x, y) + 0.03 for x, y in pts], -0.15, 0.15, "gutter", 0.0)
     s = s0 + rng.uniform(8, 25)
     alt = rng.choice((1, -1))
     while s < s1 - 6:
@@ -297,8 +297,8 @@ def drainage(mesh, e, s0, s1, zf, rng, both_curb=True):
             t = side * (base - 0.4)
             x, y = a.x - math.sin(ang) * t, a.y + math.cos(ang) * t
             if rng.random() < 0.65:
-                decal(mesh, x, y, ang, 0.3, 0.6, "decal_grating", zf, 0.012)
+                decal(mesh, x, y, ang, 0.3, 0.6, "decal_grating", zf, 0.034)
             else:
-                decal(mesh, x, y, ang, 0.5, 0.5, "decal_drain_inlet", zf, 0.012)
+                decal(mesh, x, y, ang, 0.5, 0.5, "decal_drain_inlet", zf, 0.034)
         alt = -alt
         s += rng.uniform(25, 40)
