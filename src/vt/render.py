@@ -186,7 +186,7 @@ def _skin(nt, bsdf, texc, d):
         pass
     pore = N("ShaderNodeTexNoise"); pore.inputs["Scale"].default_value = 900.0; pore.inputs["Detail"].default_value = 2.0
     L(texc.outputs["Object"], pore.inputs["Vector"])
-    bp = N("ShaderNodeBump"); bp.inputs["Strength"].default_value = 0.12; bp.inputs["Distance"].default_value = 0.0006
+    bp = N("ShaderNodeBump"); bp.inputs["Strength"].default_value = 0.08; bp.inputs["Distance"].default_value = 0.0006
     L(pore.outputs["Fac"], bp.inputs["Height"])
     L(bp.outputs[0], bsdf.inputs["Normal"])
 
@@ -402,6 +402,11 @@ def mesh_to_bpy(name, mesh):
 TIME = "day"          # init_scene(time=...) が設定。夜/夕景では窓明かり・看板の発光を材質へ入れる
 LIT = dict(day=0.0, dusk=0.28, night=0.5)    # 窓の点灯率
 HAZE = dict(day=(11.1, 13.8, 15.0, 1), dusk=(4.7, 3.1, 1.8, 1), night=(0.033, 0.029, 0.042, 1))     # 水平線の空の放射輝度(probeで実測、方位平均): 遠景はこの色へ収束
+# 写実ルック(build_city --look photoreal|legacy / --lens / --fstop / --no-dof)。legacy は従来の見た目
+PHOTO = True
+FSTOP = 5.6
+DOF = True
+_glare = None
 HAZE_K = dict(day=1.6e-4, dusk=2.2e-4, night=1.0e-4)      # 消散係数[1/m]: 1kmで約15%、5kmで約55%が霞色へ
 
 
@@ -432,10 +437,10 @@ def _world_nodes(w, sun_dir, time, realism):
         el = math.radians(-9.0)
     sky.sun_elevation = el
     sky.sun_rotation = math.atan2(d.x, d.y)
-    sky.sun_size = math.radians(1.0)
+    sky.sun_size = math.radians(1.0 if not PHOTO else 0.53)      # 実際の太陽の視直径は0.53度
     if realism:
         sky.air_density = 1.4 if time != "day" else 1.0
-        sky.aerosol_density = 2.2 if time != "day" else 1.6        # 都市の霞
+        sky.aerosol_density = 2.2 if time != "day" else (1.6 if not PHOTO else 1.1)        # 都市の霞
     bg = N("ShaderNodeBackground"); bg.inputs["Strength"].default_value = 1.0
     out = N("ShaderNodeOutputWorld")
     col = sky.outputs[0]
@@ -476,7 +481,8 @@ def _world_nodes(w, sun_dir, time, realism):
 
 
 def init_scene(res=(1600, 900), samples=48, sun_dir=(0.45, -0.35, 0.8), gpu=True, time="day", realism=False):
-    global TIME, REAL
+    global TIME, REAL, _glare
+    _glare = None
     TIME = time if realism else "day"
     REAL = realism
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -490,7 +496,7 @@ def init_scene(res=(1600, 900), samples=48, sun_dir=(0.45, -0.35, 0.8), gpu=True
     sc.render.resolution_x, sc.render.resolution_y = res
     sc.view_settings.view_transform = "AgX"
     sc.view_settings.exposure = -2.9
-    sc.view_settings.look = "AgX - Medium High Contrast"
+    sc.view_settings.look = "AgX - Medium High Contrast" if not PHOTO else "AgX - Base Contrast"
     sc.cycles.device = "CPU"
     if gpu:
         try:
@@ -536,7 +542,22 @@ def enable_haze(time):
     fac = _w_math(ng, "MULTIPLY", _w_math(ng, "SUBTRACT", 1.0, e), _w_math(ng, "LESS_THAN", rl.outputs["Depth"], 60000.0), True)
     mx = N("ShaderNodeMix"); mx.data_type = "RGBA"
     L(fac, mx.inputs[0]); L(rl.outputs["Image"], mx.inputs[6]); mx.inputs[7].default_value = HAZE[time]
-    L(mx.outputs[2], out.inputs[0])
+    last = mx.outputs[2]
+    if PHOTO:       # 弱いブルーム(レンズのグレア)。閾値は露出確定後に set_glare_threshold で設定
+        global _glare
+        _glare = N("CompositorNodeGlare")
+        _glare.inputs["Type"].default_value = "Bloom"
+        _glare.inputs["Strength"].default_value = 0.08
+        _glare.inputs["Size"].default_value = 0.55
+        _glare.inputs["Smoothness"].default_value = 0.5
+        L(last, _glare.inputs["Image"]); last = _glare.outputs["Image"]
+    L(last, out.inputs[0])
+
+
+def set_glare_threshold(ev):
+    """表示で白(線形1.0)になる放射輝度は 2^-EV。その約0.85倍より明るい所だけ光らせる"""
+    if _glare is not None:
+        _glare.inputs["Threshold"].default_value = 1.0 * 2.0 ** (-ev)
 
 
 def estimate_exposure(target=0.16, lo=-3.6, hi=1.2):
@@ -569,11 +590,62 @@ def add_camera(loc, target, lens=50):
     bpy.context.scene.collection.objects.link(cam)
     cam.location = loc
     cam.data.lens = lens
+    cam.data.sensor_width = 36.0; cam.data.sensor_fit = "HORIZONTAL"     # フルサイズ(水平画角 = 2atan(18/f): 28mm=65.5度 / 50mm=39.6度)
     cam.data.clip_end = 5000
     d = Vector(target) - Vector(loc)
     cam.rotation_euler = d.to_track_quat("-Z", "Y").to_euler()
     bpy.context.scene.camera = cam
     return cam
+
+
+def focus_distance(cam, lo=3.0, hi=1e9):
+    """画面中央付近 5x5 本のレイの中央値[m]。ヒットしなければ hi(無限遠扱い)"""
+    bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get()
+    m = cam.matrix_world
+    o = m.translation
+    fx = 18.0 / cam.data.lens
+    ds = []
+    for a in (-0.15, -0.075, 0, 0.075, 0.15):
+        for b in (-0.15, -0.075, 0, 0.075, 0.15):
+            dv = (m.to_3x3() @ Vector((a * fx, b * fx, -1.0))).normalized()
+            ok, loc, *_ = bpy.context.scene.ray_cast(dg, o, dv)
+            ds.append((loc - o).length if ok else hi)
+    return max(lo, min(hi, float(np.median(ds))))
+
+
+def enable_dof(cam, fstop, focus_max=None):
+    """被写界深度: 焦点は中央の実測距離(focus_max があれば上限: 地上は主題が遠すぎる道の先にならないよう手前に置く)"""
+    d = focus_distance(cam)
+    if focus_max:
+        d = min(d, focus_max)
+    cam.data.dof.use_dof = True
+    cam.data.dof.focus_distance = d
+    cam.data.dof.aperture_fstop = fstop
+    return d
+
+
+def postprocess(path, vignette=0.35, ca=0.0006, grain=0.010, sat=0.94, seed=0):
+    """写真らしさの最終段(表示参照8bit): 周辺減光(cos^4則風)・微小な横色収差・ISO粒子(暗部に強め)・彩度を少し抑える"""
+    from PIL import Image
+    im = np.asarray(Image.open(path).convert("RGB"), dtype=np.float32) / 255.0
+    h, w, _ = im.shape
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    nx, ny = (xx - w / 2) / (w / 2), (yy - h / 2) / (w / 2)
+    r2 = nx * nx + ny * ny                                  # 画像右端で1
+    if ca:
+        from scipy.ndimage import map_coordinates
+        for c, k in ((0, 1 + ca), (2, 1 - ca)):             # R は外側へ、B は内側へ
+            im[..., c] = map_coordinates(im[..., c], [(yy - h / 2) * k + h / 2, (xx - w / 2) * k + w / 2], order=1, mode="nearest")
+    im *= (1.0 - vignette * np.clip(r2 / 1.3, 0, 1) ** 1.5)[..., None]
+    lum = im @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
+    im = lum[..., None] + (im - lum[..., None]) * sat
+    rng = np.random.default_rng(seed)
+    n = rng.normal(0, 1, (h, w)).astype(np.float32)
+    from scipy.ndimage import gaussian_filter
+    n = gaussian_filter(n, 0.6) * 1.8                       # 画素より少し粗い粒状
+    im += (n * grain * (1.3 - lum))[..., None] * np.array([1.0, 1.0, 1.1], dtype=np.float32)
+    Image.fromarray((np.clip(im, 0, 1) * 255 + 0.5).astype(np.uint8)).save(path)
 
 
 def add_plane(size, z=0.0, mat="ground", loc=(0, 0)):
