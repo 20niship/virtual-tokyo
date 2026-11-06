@@ -8,6 +8,7 @@ from .assemble import Inst
 from .city_props import RANK, _frame
 from .world import decal
 
+COVER_MOD = {"decal_overlay_cover_round_sewer": "sewer", "decal_overlay_cover_round_water": "water", "decal_overlay_cover_gas": "gas"}
 COVER = [("decal_overlay_cover_round_sewer", 0.66, 0.66), ("decal_overlay_cover_round_water", 0.5, 0.5), ("decal_overlay_cover_square_water", 0.4, 0.4),
          ("decal_overlay_cover_gas", 0.4, 0.45), ("decal_overlay_cover_hand", 0.8, 0.56)]
 
@@ -29,7 +30,7 @@ def road_overlays(w, rng, wet=0.3, age=0.5):
     """w: build_world の戻り。wet: 水たまりの量(0..1)、age: 劣化度(0..1)。戻り値: 追加インスタンス(縁石欠け/雑草)"""
     T, area, mesh = w["T"], w["area"], w["r"]
     inst = []
-    n = dict(leaf=0, puddle=0, oil=0, tire=0, trench=0, cover=0, chip=0, weed=0)
+    n = dict(leaf=0, puddle=0, oil=0, tire=0, trench=0, cover=0, chip=0, weed=0, cover_mod=0, basin=0, reflector=0, apron=0)
 
     def D(x, y, ang, wd, ln, mat, off):
         decal(mesh, x, y, ang, wd, ln, mat, T, off)
@@ -85,7 +86,13 @@ def road_overlays(w, rng, wet=0.3, age=0.5):
                 mat, cw, cl = rng.choices(COVER[:4], weights=[5, 2, 2, 1])[0]
                 x, y, a = at(s, rng.choice(lanes) + rng.uniform(-0.3, 0.3))
                 if area.contains(Point(x, y)):
-                    D(x, y, a, cw, cl, mat, 0.016)
+                    kind = COVER_MOD.get(mat)
+                    if kind and rng.random() < 0.8:                           # 鋳鉄蓋の実モデル(種別ごとの模様)。電気・通信も混ぜる
+                        kind = rng.choices([kind, "elec", "tele"], [6, 1, 1])[0]
+                        inst.append(Inst(f"rd_cover_{kind}", x, y, T(x, y) + 0.01, rng.uniform(0, 6.28)))
+                        n["cover_mod"] += 1
+                    else:
+                        D(x, y, a, cw, cl, mat, 0.016)
                     n["cover"] += 1
         for sg, sw in ((1, p.sw_l), (-1, p.sw_r)):                           # 歩道側: ハンドホール/水道制水弁/縁石欠け/雑草
             if sw <= 0.5:
@@ -104,6 +111,30 @@ def road_overlays(w, rng, wet=0.3, age=0.5):
                     if area.contains(Point(x, y)):
                         D(x, y, rng.uniform(0, 6.28), rng.uniform(1.0, 2.2), rng.uniform(1.0, 2.2), f"decal_overlay_leaf_litter_{rng.randint(1, 2)}", curb + 0.013)
                         n["leaf"] += 1
+            if rank >= 1:                                                      # 集水桝(車道側・縁石際。25〜55m間隔)
+                for s in _walk(L, rng, 28, 55, 8):
+                    x, y, a = at(s, sg * (p.half - 0.35))
+                    if area.contains(Point(x, y)):
+                        inst.append(Inst("rd_catchbasin_cast", x, y, T(x, y) + 0.01, a))
+                        n["basin"] += 1
+            if rank >= 2 and curb >= 0.07:                                     # 縁石反射板(縁石の車道側面。黄は中央側、白は外側)
+                for s in _walk(L, rng, 24, 60, 10):
+                    x, y, a = at(s, sg * p.half)
+                    if area.contains(Point(x, y)):
+                        inst.append(Inst("rd_curb_reflector_white" if rng.random() < 0.6 else "rd_curb_reflector_amber", x, y, T(x, y) + 0.02 + curb * 0.45, a - sg * math.pi / 2 - math.pi / 2))
+                        n["reflector"] += 1
+            if rank <= 2 and sw >= 2.0 and L > 45:                             # 車両出入口の切り下げ(すりつけ)+両脇のポール
+                for s in _walk(L, rng, 45, 100, 16):
+                    if rng.random() < 0.55:
+                        x, y, a = at(s, sg * p.half)
+                        if area.contains(Point(x, y)):
+                            rot = a - sg * math.pi / 2 - math.pi / 2
+                            inst.append(Inst("rd_driveway_apron_15" if curb >= 0.1 else "rd_driveway_apron_05", x, y, T(x, y) + 0.02, rot))
+                            for ds in (-2.4, 2.4):
+                                bx, by, _a = at(s + ds, sg * (p.half + 0.5))
+                                if area.contains(Point(bx, by)):
+                                    inst.append(Inst("bollard_fixed", bx, by, T(bx, by) + 0.02 + curb, 0.0))
+                            n["apron"] += 1
             for s in _walk(L, rng, 14, 40, 6):
                 if curb >= 0.07 and rng.random() < 0.4 * (0.4 + age):
                     x, y, a = at(s, sg * (p.half + 0.0))

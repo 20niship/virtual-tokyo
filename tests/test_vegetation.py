@@ -73,3 +73,18 @@ def test_placement_avoids_carriageway_and_is_deterministic():
         assert i.name in REG
         if i.name.startswith(("veg_tree", "veg_keyaki", "veg_ichou", "veg_platanus", "veg_sakura", "veg_kusunoki", "veg_shii")):
             assert not cw.contains(Point(i.x, i.y)), i.name
+
+
+def test_realistic_trees_small_leaf_cards_litter_and_bark_height():
+    import numpy as np
+    mesh, _ = tg.build_tree("keyaki", 9.0, 0, "summer")
+    assert 5000 <= tg.tris(mesh) <= 12000
+    assert {"veg_litter_y", "veg_litter_r", "veg_litter_b", "veg_litter_g"} <= set(REG)
+    for k in "yrbg":
+        assert (TEX / f"overlay_litter_{k}.png").exists()
+    for b in ("furrow", "furrow_dark", "smooth", "plane", "pine", "palm", "shuro"):
+        assert (TEX / f"bark_{b}_h.png").exists()
+    v = np.array(mesh.v, float).reshape(-1, 3)
+    leaf = [f for f, mt in zip(mesh.f, mesh.m) if mt == "leaf_atlas"]
+    ext = max(np.ptp(v[list(f)], axis=0).max() for f in leaf)
+    assert ext < 1.3, ext                     # 葉クラスターカードは実寸(旧実装は2〜3.5m)

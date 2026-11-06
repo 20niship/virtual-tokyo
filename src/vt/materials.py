@@ -118,14 +118,15 @@ MATERIALS.update({
 # ---- 植栽: 葉アトラス(alpha cutout・両面)・樹皮(手続きテクスチャ) ----
 MATERIALS.update({
     "leaf_atlas": dict(color="#ffffff", rough=0.55, metal=0.0, tex="leaves_atlas.png", size=None, alpha=True, cutout=0.45, double_sided=True, foliage=True),
+    **{f"veg_litter_{k}": dict(color="#ffffff", rough=0.88, metal=0.0, tex=f"overlay_litter_{k}.png", size=None, alpha=True, wear=None) for k in "yrbg"},
     "foliage_core": M("#1f3418", 0.95),
-    "bark_furrow": T("bark_furrow.png", 1.0, 0.92, 1.0),
-    "bark_furrow_dark": T("bark_furrow_dark.png", 1.0, 0.92, 1.0),
-    "bark_smooth": T("bark_smooth.png", 0.8, 0.7, 0.4),
-    "bark_plane": T("bark_plane.png", 1.2, 0.8, 0.6),
-    "bark_pine": T("bark_pine.png", 0.9, 0.95, 1.0),
-    "bark_palm": T("bark_palm.png", 0.7, 0.9, 0.7),
-    "bark_shuro": T("bark_shuro.png", 0.6, 0.95, 0.5),
+    "bark_furrow": T("bark_furrow.png", 1.0, 0.92, 1.0, hmap="bark_furrow_h.png"),
+    "bark_furrow_dark": T("bark_furrow_dark.png", 1.0, 0.92, 1.0, hmap="bark_furrow_dark_h.png"),
+    "bark_smooth": T("bark_smooth.png", 0.8, 0.7, 0.4, hmap="bark_smooth_h.png"),
+    "bark_plane": T("bark_plane.png", 1.2, 0.8, 0.6, hmap="bark_plane_h.png"),
+    "bark_pine": T("bark_pine.png", 0.9, 0.95, 1.0, hmap="bark_pine_h.png"),
+    "bark_palm": T("bark_palm.png", 0.7, 0.9, 0.7, hmap="bark_palm_h.png"),
+    "bark_shuro": T("bark_shuro.png", 0.6, 0.95, 0.5, hmap="bark_shuro_h.png"),
     "tree_pit_iron": M("#2d2f31", 0.6, 0.8, rust=1),
 })
 
@@ -175,3 +176,4 @@ MATERIALS.update({
     "fence_sheet": M("#d9dcd8", 0.6, 0.2, dirt=1), "cone_orange": M("#ff5a00", 0.6), "boat_hull": M("#e6e8e8", 0.3, 0.2, dirt=1),
 })
 from . import materials_b  # noqa: E402,F401  (リアリズム強化B: 追記マテリアル)
+from . import materials_h  # noqa: E402,F401  (Anny 人物: 肌・服・髪)

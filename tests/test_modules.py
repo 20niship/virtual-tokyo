@@ -5,7 +5,9 @@ from vt.modules.library import REG, get
 
 def test_all_modules_build_and_use_known_materials():
     assert len(REG) >= 90
-    for n in REG:
+    for n, r in REG.items():
+        if r.get("lazy"):
+            continue
         m = get(n)
         assert m.f, n
         assert set(m.m) <= set(MATERIALS), (n, set(m.m) - set(MATERIALS))

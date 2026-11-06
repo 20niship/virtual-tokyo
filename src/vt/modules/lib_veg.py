@@ -85,3 +85,29 @@ def _tree_ring(m, W, H, rng):         # 縁石の丸い植樹桝(土入り)
 
 reg("veg_tree_pit_grating", _tree_pit, W=1.2, H=0.05, cat=CAT)
 reg("veg_tree_ring_curb", _tree_ring, W=1.4, H=0.2, cat=CAT)
+
+
+def _litter(kind, seed):
+    """落ち葉の平置きデカール(3m角、地面+1cm)。葉は季節色(y=黄/r=赤橙/b=枯葉/g=青葉)に染めたテクスチャ。インスタンスで樹下・歩道に散らす"""
+    def fn(m, W, H, rng):
+        m.poly([(-1.5, -1.5, 0.012), (1.5, -1.5, 0.012), (1.5, 1.5, 0.012), (-1.5, 1.5, 0.012)], f"veg_litter_{kind}", [(0, 0), (1, 0), (1, 1), (0, 1)])
+    return fn
+
+
+for _k in "yrbg":
+    reg(f"veg_litter_{_k}", _litter(_k, 0), W=3.0, H=0.02, cat=CAT)
+
+
+def _tree_pit_curb(m, W, H, rng):     # 歩道の植樹桝: 縁石(幅12cm・高さ12cm)で1.5m角を囲み、中は土+バークチップ
+    o, i, h = 0.75, 0.63, 0.12
+    m.box(-o, -o, 0, o, -i, h, "concrete_tex")
+    m.box(-o, i, 0, o, o, h, "concrete_tex")
+    m.box(-o, -i, 0, -i, i, h, "concrete_tex")
+    m.box(i, -i, 0, o, i, h, "concrete_tex")
+    m.box(-i, -i, 0.0, i, i, 0.07, "soil")
+    for _ in range(14):               # バークチップの小片
+        x, y = rng.uniform(-0.55, 0.55), rng.uniform(-0.55, 0.55)
+        m.box(x - 0.05, y - 0.03, 0.07, x + 0.05, y + 0.03, 0.09, "wood")
+
+
+reg("veg_tree_pit_curb", _tree_pit_curb, W=1.5, H=0.12, cat=CAT)

@@ -14,6 +14,7 @@ OUT = Path(__file__).resolve().parents[2] / "out/render/final"
 EYE = 1.65
 TIME = "day"        # day / dusk / night (build_realism.py --time)
 REALISM = True      # 雲・霞・水面・壁の汚れ・窓の室内・自動露出。False なら従来の見た目
+LENS = 0.0          # >0: 焦点距離[mm]を全視点で固定(0=視点種別ごとに自動: 地上28/35mm・俯瞰60mm)
 EV_TARGET = dict(day=0.12, dusk=0.08, night=0.03)   # 自動露出の目標(試し撮りの線形輝度の中央値)
 
 
@@ -157,8 +158,10 @@ def render_view(w, tiles, v, radius, samples=24, res=(1280, 720), extra=None, dm
     render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65), time=TIME, realism=REALISM)
     import bpy
     vs = bpy.context.scene.view_settings
-    vs.look = "AgX - Base Contrast" if not REALISM else "AgX - Medium High Contrast"      # 谷間の道が黒く潰れないよう、高コントラストlookをやめる
+    vs.look = "AgX - Base Contrast" if (not REALISM or render.PHOTO) else "AgX - Medium High Contrast"      # 谷間の道が黒く潰れないよう、高コントラストlookをやめる
     vs.exposure = -1.8 if v.kind != "aerial" else -2.4
+    if render.PHOTO and v.kind == "aerial":
+        vs.look = "AgX - Medium High Contrast"       # 俯瞰は大気で眠くなりやすいので少し締める
     if not REALISM:
         bpy.context.scene.world.node_tree.nodes["Background"].inputs[1].default_value *= 2.0 if v.kind != "aerial" else 1.0   # 空光(谷間の環境光)を強める
     for name in ("g", "r", "t"):
@@ -176,12 +179,38 @@ def render_view(w, tiles, v, radius, samples=24, res=(1280, 720), extra=None, dm
     render.add_instances_gn(sel)
     bl = [b for b in w["builts"] if (b.insts[0].x - cx) ** 2 + (b.insts[0].y - cy) ** 2 < (radius + 60) ** 2]
     render.add_buildings_gn(bl)
-    render.add_camera(v.cam, v.tgt, v.lens)
+    if render.PHOTO:
+        lens, cam_loc = photo_lens(v)
+        cam = render.add_camera(cam_loc, v.tgt, lens)
+        if render.DOF:
+            fd = render.enable_dof(cam, render.FSTOP if v.kind != "aerial" else max(render.FSTOP, 8.0), 25.0 if v.kind != "aerial" else None)
+            print(f"  {lens:.0f}mm F{cam.data.dof.aperture_fstop:g} focus {fd:.1f}m")
+    else:
+        render.add_camera(v.cam, v.tgt, v.lens)
     OUT.mkdir(parents=True, exist_ok=True)
     if REALISM:
         vs.exposure = -1.0 if TIME == "night" else render.estimate_exposure(EV_TARGET[TIME], hi=1.2 if TIME == "day" else 1.8)     # 夜は光源(窓・街灯)基準の固定露出
         print(f"  exposure {vs.exposure:+.2f} EV")
+    if render.PHOTO:
+        render.set_glare_threshold(vs.exposure)
     render.render(OUT / f"{v.name}.png")
+    if render.PHOTO:
+        render.postprocess(OUT / f"{v.name}.png")
+
+
+GROUND_WIDE = ("roadway", "intersection", "alley", "underdeck", "station", "behind", "parking")
+
+
+def photo_lens(v):
+    """写実ルックの焦点距離とカメラ位置: 地上は目線で28〜35mm、俯瞰は60mm(画角を保つよう被写体から距離を焦点距離比だけ引く)"""
+    if LENS > 0:
+        lens = LENS
+    else:
+        lens = 60.0 if v.kind == "aerial" else (28.0 if v.kind in GROUND_WIDE else 35.0)
+    if v.kind != "aerial":
+        return lens, v.cam
+    k = lens / v.lens          # 望遠にした分だけ後ろへ下がる(同じ構図でパースだけ浅くなる)
+    return lens, tuple(t + (c - t) * k for c, t in zip(v.cam, v.tgt))
 
 
 def mean_luma(name):
