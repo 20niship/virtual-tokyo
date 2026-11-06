@@ -1,0 +1,2 @@
+grid: {size_m: 512, res_m: 4, crs: "EPSG:6677"}
+steps: []

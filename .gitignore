@@ -19,3 +19,8 @@ data/humans/
 data/osm
 data/dem
 out/cache
+
+# terra
+data/terra/*
+!data/terra/SOURCES.md
+out/terra/
