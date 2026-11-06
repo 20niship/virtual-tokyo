@@ -22,6 +22,9 @@ def load_recipe(path_or_dict) -> dict:
 
 
 def make_grid(g: dict) -> Grid:
+    if "center_lonlat" in g:      # 実空間: 中心の経緯度から UTM の Grid を作る
+        from ..source.gsi_dem import lonlat_grid
+        return lonlat_grid(g["center_lonlat"], g.get("size_m", 1000), g.get("res_m", 4))
     return Grid.from_size(g.get("size_m", 1000), g.get("res_m", 4), g.get("crs", "local"), g.get("x0", 0.0), g.get("y0", 0.0))
 
 
@@ -57,7 +60,7 @@ def run_recipe(recipe, seed=None, out=None, cache=True, log=print, grid_over=Non
     r = load_recipe(recipe)
     g = {**r.get("grid", {}), **(grid_over or {})}
     seed = int(r.get("seed", 0) if seed is None else seed)
-    doc = Document(make_grid(g), seed, meta=dict(climate=r.get("climate", {})))
+    doc = Document(make_grid(g), seed, meta=dict(climate=r.get("climate", {}), center_lonlat=g.get("center_lonlat")))
     doc.layers["height"] = np.zeros(doc.grid.shape, np.float32)
     cdir = Path(out or ".") / ".cache"
     if cache:

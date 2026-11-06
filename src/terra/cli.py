@@ -93,7 +93,7 @@ def main(argv=None):
     f.add_argument("--bbox", required=True, help="lon0,lat0,lon1,lat1")
     f.add_argument("--sources", default="gsi_dem")
     f.add_argument("--out", default="data/terra")
-    f.add_argument("--zoom", type=int, default=14)
+    f.add_argument("--zoom", type=int, default=15)
     f.set_defaults(f=cmd_fetch)
     p = sp.add_parser("preview")
     p.add_argument("dir")
