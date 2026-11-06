@@ -6,6 +6,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from shapely.geometry import box
+from shapely.ops import unary_union
 
 from . import bridges, furniture, ground, rails_c, roads, vegetation
 from .assemble import build_building
@@ -75,10 +76,12 @@ def build_world(half=900, tile=450, seed=3, log=print, center_ll=CENTER_LL, mode
         land = ground.land_polygon(L, area)
         W = dict(area=area, land=land, zf=T, center=c)
         lap("loaded + land")
-        g = ground.build_ground(L, W)
-        lap("ground")
         r, edges, info = roads.build_roads(L, W)
         lap("roads")
+        # 車道・歩道の下には地面を張らない(粗い地面三角形が舗装を突き抜けて「変な板」になるのを防ぐ)
+        W["road_hole"] = unary_union([info["cw"], info["sw"]]).buffer(-0.1)
+        g = ground.build_ground(L, W)
+        lap("ground")
         W["edges"] = edges
         t, rail_insts = rails_c.build_rail(L, W)
         lap("rail")

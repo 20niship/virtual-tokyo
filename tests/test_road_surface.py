@@ -1,3 +1,4 @@
+import math
 import importlib.util
 import random
 from pathlib import Path
@@ -103,3 +104,21 @@ def test_road_detail_modules_register_and_build():
     import numpy as np
     v = np.array(get("rd_cover_sewer").v).reshape(-1, 3)
     assert v[:, 2].max() < 0.03 and abs(v[:, 0]).max() < 0.36            # 舗装に面一(上端3cm未満)・直径約0.6m
+
+
+def test_ground_not_under_roadway():
+    """回帰: 車道/歩道の下に地面メッシュを張らない(粗い地面三角形が舗装を突き抜け、車道を横切る板になった)"""
+    from shapely.ops import unary_union
+    from vt import ground
+    feats = grid.build_cases()[next(iter(grid.build_cases()))]
+    xs = [p[0] for f in feats for p in f.geom.coords]; ys = [p[1] for f in feats for p in f.geom.coords]
+    c = ((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2)
+    w = _world(c, 220)
+    w["zf"] = lambda x, y: 2.0 + 0.12 * math.sin(x / 2.5) + 0.002 * y     # 起伏のある地形
+    L = {"roads": feats, "green": [], "landuse": [], "water": [], "buildings": []}
+    m, edges, info = roads.build_roads(L, w, dict(roads.CFG))
+    w["road_hole"] = unary_union([info["cw"], info["sw"]]).buffer(-0.1)
+    g = ground.build_ground(L, w)
+    core = info["cw"].buffer(-0.5)
+    bad = [f for f, mat in zip(g.f, g.m) if mat == "ground" and core.contains(Point(*[sum(g.v[j][k] for j in f) / len(f) for k in (0, 1)]))]
+    assert not bad
