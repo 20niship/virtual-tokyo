@@ -152,16 +152,18 @@ def build_ground(L, world, seed=0):
     area, land = world["area"], world["land"]
     rng = random.Random(seed)
     m = Mesh()
+    hole = world.get("road_hole")
+    base = land.difference(hole) if hole is not None and not hole.is_empty else land   # quay は元の land を使う
     # 地面ベース(わずかに下げて、上に重ねる面とのZファイトを避ける)
-    fill(m, land, lambda x, y: zf(x, y) - 0.03, "ground", 6.0, True, uv=lambda x, y: (x, y))
+    fill(m, base, lambda x, y: zf(x, y) - 0.03, "ground", 6.0, True, uv=lambda x, y: (x, y))
     # 緑地・土地利用(上に重ねる)
     for f in L["green"]:
-        g = f.geom.intersection(land)
+        g = f.geom.intersection(base)
         if not g.is_empty:
             fill(m, g, lambda x, y: zf(x, y) + 0.06, "grass", 6.0, True, uv=lambda x, y: (x, y))
     for f in L["landuse"]:
         t = f.tags
-        g = f.geom.intersection(land)
+        g = f.geom.intersection(base)
         if g.is_empty or g.area < 20:
             continue
         mat = None

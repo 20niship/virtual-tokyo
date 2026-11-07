@@ -1,0 +1,9 @@
+# 実 DEM: 奥多摩の山地 2km(河川密度・傾斜の実測比較用)。国土地理院 標高タイル
+grid: {center_lonlat: [139.02, 35.85], size_m: 2000, res_m: 4}
+steps:
+  - source.gsi_dem: {}
+  - masks.slope: {}
+  - hydro.flow: {}
+  - hydro.rivers: {min_area_km2: 0.03}
+  - hydro.lakes: {min_depth: 1.5, min_area_m2: 3000}
+export: {geotiff: true}

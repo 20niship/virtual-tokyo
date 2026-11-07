@@ -1,0 +1,9 @@
+# 仮想 8km 山岳の中に、実 DEM(富士山麓 3km)を貼り込む。同じ Document に入ることの確認
+seed: 42
+grid: {size_m: 8000, res_m: 8, crs: local}
+steps:
+  - gen.noise: {kind: fbm, wavelength_m: 4500, octaves: 7, gain: 0.5, base_height: 1100, warp: 0.5, offset: 300, power: 1.6}
+  - gen.noise: {kind: ridged, wavelength_m: 1800, octaves: 5, gain: 0.45, base_height: 350, warp: 0.6}
+  - gen.stamp: {dem: {center: [138.775, 35.385]}, size_m: 3000, at: [0.5, 0.5], blend_m: 600, mode: replace, fit: true}
+  - masks.slope: {}
+export: {geotiff: true}

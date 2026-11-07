@@ -1,0 +1,6 @@
+# 実 DEM: 富士山 北東〜東斜面の山麓(御殿場側の大沢周辺)。国土地理院 標高タイル
+grid: {center_lonlat: [138.775, 35.385], size_m: 3000, res_m: 5}
+steps:
+  - source.gsi_dem: {}
+  - masks.slope: {}
+export: {heightmap: png16, geotiff: true}
