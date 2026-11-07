@@ -213,10 +213,45 @@ uv run python scripts/build_extra.py <spot> --round N   # 田舎/郊外/ロー�
 - OSMのデータは完全ではないため、道路幅員・信号位置は実際と違う場合がある。
 - 詳細な記録は `docs/` を参照。
 
+## Terra(地形・自然の自動生成)
+
+`src/terra/` は都市(`src/vt/`)の外側の地面・水系・植生を作る別パッケージ。実 DEM(国土地理院の標高タイル)と仮想地形(ノイズ・形状)を同じ Document に入れ、侵食 → 水系 → バイオーム → 散布 → USD / Blender まで通す。設計と進捗は `docs/terra/status.md`。実装済みは T0〜T3(道路・ダム・電線・タイル分割などは未実装)。
+
+```bash
+uv sync --extra terra
+uv run terra generate recipes/terra/virtual_2km.yaml --out out/terra/v2k      # 仮想 2km 角(侵食・川・植生・岩。USD も出力)
+uv run terra generate recipes/terra/fuji_foothills.yaml --out out/terra/fuji  # 実 DEM(初回は標高タイルを data/terra/ に取得)
+uv run terra preview out/terra/v2k --overlay river,biome                      # トップダウンのハイトシェード
+uv run terra export out/terra/v2k --usd --splat --geotiff --heightmap raw16
+uv run python scripts/terra_render.py out/terra/v2k --view all -o out/terra/v2k --look photoreal   # Cycles(vt の写実カメラ設定を再利用)
+uv run python scripts/terra_video.py out/terra/v2k --mode fly -o out/terra/v2k_fly.mp4
+uv run python scripts/terra_stats.py out/terra/v2k out/terra/okutama           # 実 DEM との統計比較
+```
+
+- フォルダ: `src/terra/{core,source,gen,masks,erosion,hydro,biome,scatter,modules,export}`、レシピ `recipes/terra/`、小さなテクスチャ・岩の USD module `assets/terra/`、取得データ `data/terra/`(gitignore。出典と条件は `data/terra/SOURCES.md`)、テスト `tests/terra/`。
+- レシピ(YAML)は `steps` に `名前: パラメータ` を並べる。ノードごとに入力ハッシュでキャッシュ(`<out>/.cache`。コードを直した時は `--no-cache`)。乱数は seed+ノード名で決定的。
+
+```yaml
+seed: 7
+grid: {size_m: 2000, res_m: 2, crs: local}        # 実空間は center_lonlat: [lon, lat]
+climate: {lat: 36.0, sea_level_temp_c: 15}
+steps:
+  - gen.noise: {kind: fbm, wavelength_m: 1100, base_height: 400, offset: 700, power: 1.4}
+  - erosion.fluvial: {iterations: 30, k: 0.015}
+  - erosion.hydraulic: {iterations: 120}
+  - masks.slope: {}
+  - hydro.flow: {}
+  - hydro.rivers: {min_area_km2: 0.03}
+  - biome.jp_forest: {}
+  - scatter.trees: {r_m: 3.6, exclude: [river, lake]}
+  - scatter.rocks: {cliff_deg: 54}
+export: {usd: true, splat: true}
+```
+
 ## データの出典・ライセンス
 
 - 地図データ: © OpenStreetMap contributors(ODbL)。このリポジトリの生成物のうちOSM由来の形状は、ODbLの帰属表示が必要。
-- 標高: 国土地理院 基盤地図情報(DEM5m)。
+- 標高: 国土地理院 基盤地図情報(DEM5m)。Terra の標高タイルは「国土地理院(地理院タイル)」https://maps.gsi.go.jp/development/ichiran.html を出典とする(条件は `data/terra/SOURCES.md`)。
 - 葉テクスチャなど元素材の原本はコミットしていない(変換したアトラスのみ)。
 - 店舗名・看板・ナンバーは架空。実在企業のロゴは使わない。
 

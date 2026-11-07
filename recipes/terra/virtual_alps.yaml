@@ -1,0 +1,12 @@
+# 仮想 8km 山岳(T1 は地形のみ。T2 以降で侵食・水系・植生を追加する)
+seed: 42
+grid: {size_m: 8000, res_m: 8, crs: local}
+climate: {lat: 36.2, sea_level_temp_c: 15, precip_mm: 2200, wind_dir_deg: 270}
+steps:
+  - gen.noise: {kind: fbm, wavelength_m: 4500, octaves: 7, gain: 0.5, base_height: 1100, warp: 0.5, offset: 300, power: 1.6}
+  - gen.noise: {kind: ridged, wavelength_m: 1800, octaves: 5, gain: 0.45, base_height: 350, warp: 0.6}
+  - gen.shape: {kind: ridge, path: [[0.1, 0.3], [0.45, 0.55], [0.9, 0.7]], radius_m: 1500, height: 1600}
+  - gen.shape: {kind: mountain, at: [0.7, 0.35], radius_m: 1400, height: 800}
+  - gen.noise: {kind: fbm, wavelength_m: 300, octaves: 4, base_height: 8}
+  - masks.slope: {}
+export: {heightmap: png16, geotiff: true}
