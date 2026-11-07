@@ -115,7 +115,7 @@ class Shrubs(Node):
     """林床の低木(ツツジ・ツゲ)・湿地のアジサイ・開けた所の草を散布。要 biome.jp_forest"""
     inputs = ("canopy", "biome")
     scatter_outputs = ("shrubs",)
-    defaults = dict(r_m=2.6, exclude=["river", "lake", "road", "powerline"], shrub_density=0.5, grass_density=0.6)
+    defaults = dict(r_m=2.6, exclude=["river", "lake", "road", "powerline"], shrub_density=0.5, grass_density=0.6, scale_mul=1.0, forest_grass=0.0)
 
     def run(self, doc, rng):
         p, g = self.params, doc.grid
@@ -130,57 +130,9 @@ class Shrubs(Node):
         xy, jj, ii = sample(g, p["r_m"], int(rng.integers(1 << 30)), dens.astype(np.float32), allowed, rng)
         b, f = biome[jj, ii], forest[jj, ii]
         names = ["veg_azalea_0_r8", "veg_azalea_1_r8", "veg_azalea_green_r8", "veg_tsuge_dome_r8", "veg_hydrangea_0_r75", "veg_grass_tuft_0", "veg_grass_tuft_1", "veg_grass_plume_0"]
-        kind = np.where(f, rng.integers(0, 4, len(xy)), rng.integers(5, 8, len(xy)))
+        kind = np.where(f, np.where(rng.random(len(xy)) < p["forest_grass"], rng.integers(5, 8, len(xy)), rng.integers(0, 4, len(xy))), rng.integers(5, 8, len(xy)))      # forest_grass: 林内でも草にする割合
         kind = np.where(b == RIPARIAN, np.where(rng.random(len(xy)) < 0.5, 4, kind), kind)
-        scale = np.where(f, rng.uniform(0.7, 1.5, len(xy)), rng.uniform(0.8, 1.6, len(xy)))
+        scale = np.where(f, rng.uniform(0.7, 1.5, len(xy)), rng.uniform(0.8, 1.6, len(xy))) * p["scale_mul"]
         _put(doc, "shrubs", xy, rng.uniform(0, 2 * np.pi, len(xy)), scale, kind, names, zoff=-0.03)
 
 
-@node("scatter.rocks")
-class Rocks(Node):
-    """崖(急斜面に崖パネル)・崖下の転石(扇状)・露頭・巨礫・川沿いの丸い礫を散布。where: 崖とみなす傾斜[度]"""
-    inputs = ("slope", "aspect")
-    scatter_outputs = ("rocks",)
-    defaults = dict(cliff_deg=54.0, boulder_density=0.04, exclude=["river", "lake"])
-
-    def run(self, doc, rng):
-        p, g = self.params, doc.grid
-        slope, aspect = doc.layers["slope"], doc.layers["aspect"]
-        ex = exclusion(doc, p["exclude"], 0.5)
-        names = [f"rock_cliff_{i}" for i in range(3)] + [f"rock_outcrop_{i}" for i in range(3)] + [f"rock_boulder_{z}_{i}" for z in "sml" for i in range(4)] \
-            + [f"rock_scree_{i}" for i in range(3)] + [f"rock_pebble_{i}" for i in range(3)]
-        ix = {n: i for i, n in enumerate(names)}
-        parts = []   # (xy, kind, scale, pitch, yaw)
-        # 1) 崖パネル: 急斜面に疎ら(間隔 ~12m)。面は下り方向、斜面に沿って傾ける
-        cl = (slope >= p["cliff_deg"]) & ~ex
-        xy, jj, ii = sample(g, 12.0, int(rng.integers(1 << 30)), cl.astype(np.float32) * 0.25, None, rng)
-        a = np.radians(aspect[jj, ii])
-        al = np.radians(slope[jj, ii])
-        parts.append((xy, np.array([ix[f"rock_cliff_{k}"] for k in rng.integers(0, 3, len(xy))], np.int16) if len(xy) else np.zeros(0, np.int16), rng.uniform(0.8, 1.5, len(xy)),
-                      al - np.pi / 2, np.pi - a))
-        # 2) 崖下の転石: 崖マスクをぼかして下流側へ広げた密度(傾斜 22〜42度)
-        fan = gaussian_filter(cl.astype(np.float32), 14.0 / g.res * 2) * 3.0
-        d2 = np.clip(fan, 0, 1) * 0.5 * np.clip((slope - 18) / 6, 0, 1) * np.clip((44 - slope) / 6, 0, 1) * (~ex)
-        xy, jj, ii = sample(g, 3.0, int(rng.integers(1 << 30)), d2.astype(np.float32), None, rng)
-        zi = rng.choice(3, len(xy), p=[0.75, 0.2, 0.05])
-        k = np.array([ix[f"rock_boulder_{'sml'[z]}_{rng.integers(4)}"] for z in zi], np.int16) if len(xy) else np.zeros(0, np.int16)
-        parts.append((xy, k, rng.uniform(0.4, 1.8, len(xy)), np.zeros(len(xy)), rng.uniform(0, 6.28, len(xy))))
-        # 3) 一般の巨礫・露頭(土が薄い所ほど多い)
-        sd = doc.layers.get("soil_depth", np.full(g.shape, 1.0, np.float32))
-        d3 = p["boulder_density"] * np.clip(1.2 - sd, 0.1, 1.2) * np.clip(slope / 30, 0.3, 1) * (~ex) * (slope < p["cliff_deg"])
-        xy, jj, ii = sample(g, 5.0, int(rng.integers(1 << 30)), d3.astype(np.float32), None, rng)
-        isout = rng.random(len(xy)) < 0.12
-        k = np.where(isout, rng.integers(0, 3, len(xy)) + 3, [ix[f"rock_boulder_{'sml'[z]}_{rng.integers(4)}"] for z in rng.choice(3, len(xy), p=[0.55, 0.35, 0.1])])
-        parts.append((xy, k.astype(np.int16), np.where(isout, rng.uniform(0.7, 1.5, len(xy)), rng.uniform(0.6, 1.5, len(xy))), np.zeros(len(xy)), rng.uniform(0, 6.28, len(xy))))
-        # 4) 川沿いの礫・小石(川から 12m 以内)
-        riv = doc.layers.get("river", np.zeros(g.shape, np.float32)) > 0
-        if riv.any():
-            dist = distance_transform_edt(~riv) * g.res
-            d4 = np.clip(1 - dist / 12.0, 0, 1) * 0.9 * (~ex)
-            xy, jj, ii = sample(g, 2.2, int(rng.integers(1 << 30)), d4.astype(np.float32), None, rng)
-            k = np.where(rng.random(len(xy)) < 0.5, rng.integers(0, 3, len(xy)) + ix["rock_pebble_0"], rng.integers(0, 3, len(xy)) + ix["rock_scree_0"])
-            parts.append((xy, k.astype(np.int16), rng.uniform(0.7, 1.4, len(xy)), np.zeros(len(xy)), rng.uniform(0, 6.28, len(xy))))
-        xy = np.concatenate([q[0] for q in parts])
-        xy = xy + rng.uniform(-1.3, 1.3, xy.shape)            # 高密度域のポアソンディスクが六方格子状に見えないよう位置を崩す
-        _put(doc, "rocks", xy, np.concatenate([q[4] for q in parts]), np.concatenate([q[2] for q in parts]), np.concatenate([q[1] for q in parts]), names,
-             pitch=np.concatenate([q[3] for q in parts]), zoff=-0.1)

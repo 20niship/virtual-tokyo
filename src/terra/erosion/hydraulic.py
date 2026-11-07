@@ -86,7 +86,7 @@ def _step(b, d, s, fL, fR, fU, fD, vx, vy, d2, s2, nb, rain, dt, res, kc, ks, kd
             d[j, i] = d2[j, i] * (1.0 - ke * dt)
 
 
-def hydraulic(z, res, iterations=150, rain=0.012, dissolve=0.3, deposit=0.3, capacity=0.05, evap=0.5, dt=0.1, max_ero=0.05, tilt_min=0.05, damp=0.9, vmax=3.0):
+def hydraulic(z, res, iterations=150, rain=0.012, dissolve=0.3, deposit=0.3, capacity=0.05, evap=0.5, dt=0.1, max_ero=0.05, tilt_min=0.05, damp=0.9, vmax=3.0, smooth=1.0):
     """z[m] → 侵食後の z と、堆積/侵食量 dz[m](負=削れ)。1 ステップ最大 max_ero[m] まで削る"""
     b = np.array(z, dtype=np.float64, order="C", copy=True)
     b0 = b.copy()
@@ -97,6 +97,9 @@ def hydraulic(z, res, iterations=150, rain=0.012, dissolve=0.3, deposit=0.3, cap
     vx, vy, d2, s2, nb = (np.zeros(sh) for _ in range(5))
     for _ in range(iterations):
         _step(b, d, s, *z4, vx, vy, d2, s2, nb, rain, dt, float(res), capacity, dissolve, deposit, evap, damp, tilt_min, max_ero, vmax)
+    if smooth > 0:      # 4 方向の流量モデルが残す格子軸方向の細い縞を、侵食量(差分)だけ等方に平滑化して除く
+        from scipy.ndimage import gaussian_filter
+        b = b0 + gaussian_filter(b - b0, smooth)
     return b.astype(np.float32), (b - b0).astype(np.float32)
 
 
