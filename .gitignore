@@ -24,3 +24,4 @@ out/cache
 data/terra/*
 !data/terra/SOURCES.md
 out/terra/
+assets/terra/modules/
