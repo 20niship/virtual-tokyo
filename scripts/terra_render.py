@@ -16,6 +16,7 @@ ap.add_argument("--lens", type=float, default=0)
 ap.add_argument("--fstop", type=float, default=5.6)
 ap.add_argument("--no-dof", action="store_true")
 ap.add_argument("--stride", type=int, default=1, help="地形メッシュの間引き")
+ap.add_argument("--no-water", action="store_true")
 ap.add_argument("--no-scatter", action="store_true")
 ap.add_argument("--splat", action="store_true", help="biome の splat 材質(w0/w1)を使う")
 ap.add_argument("--time", default="day")
@@ -42,6 +43,8 @@ for v in views:
         splat = dict(w0=doc.layers["splat_w0"], w1=doc.layers["splat_w1"])
     R.terrain_object(doc, box=box, stride=a.stride, splat=splat)
     R.add_far_plane(doc)
+    if not a.no_water:
+        R.add_water(doc)
     if doc.scatter and not a.no_scatter:
         from terra.export.scatter_assets import load_protos
         n = R.add_scatter(doc, load_protos(doc))

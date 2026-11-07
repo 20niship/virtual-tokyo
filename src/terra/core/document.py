@@ -27,11 +27,11 @@ class Document:
     def heightfield(self) -> Heightfield:
         return Heightfield(self.grid, self.layers["height"])
 
-    def set(self, name, arr):
+    def set(self, name, arr, keep64=False):
         arr = np.asarray(arr)
         if arr.shape != self.grid.shape:
             raise ValueError(f"layer {name}: shape {arr.shape} != grid {self.grid.shape}")
-        if arr.dtype == np.float64:
+        if arr.dtype == np.float64 and not keep64:
             arr = arr.astype(np.float32)
         self.layers[name] = arr
 

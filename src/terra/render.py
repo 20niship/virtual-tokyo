@@ -18,10 +18,12 @@ def default_colors(doc: Document):
     z = doc.height
     s, _ = slope_aspect(z, doc.grid.res)
     t = np.clip((z - z.min()) / max(float(np.ptp(z)), 1.0), 0, 1)[..., None]
-    low, mid, high = np.array([0.16, 0.26, 0.10]), np.array([0.30, 0.25, 0.14]), np.array([0.62, 0.60, 0.56])
-    c = np.where(t < 0.5, low + (mid - low) * (t / 0.5), mid + (high - mid) * ((t - 0.5) / 0.5))
-    rock = np.clip((s[..., None] - 30) / 15, 0, 1)
-    c = c * (1 - rock) + np.array([0.32, 0.30, 0.28]) * rock
+    low, high = np.array([0.15, 0.24, 0.09]), np.array([0.33, 0.30, 0.18])
+    c = low + (high - low) * t
+    rock = np.clip((s[..., None] - 32) / 14, 0, 1)
+    c = c * (1 - rock) + np.array([0.30, 0.27, 0.24]) * rock
+    if "water_depth" in doc.layers:
+        c = np.where(doc.layers["water_depth"][..., None] > 0.05, np.array([0.12, 0.13, 0.10]), c)
     return np.concatenate([c, np.ones_like(t)], -1)
 
 
@@ -258,11 +260,65 @@ def make_camera(doc, view, box=None, lens=0, fstop=5.6, dof=True, seed=0, pose=N
     return cam
 
 
-def add_far_plane(doc, z=None):
-    """水平線までの遠景: 森の色の巨大平面(コンポジタの霞で空へ溶ける)。z=None は外周高さの下位 10%"""
+def _water_material():
     import bpy
-    h = doc.height
-    z = float(np.percentile(np.r_[h[0], h[-1], h[:, 0], h[:, -1]], 10)) - 5 if z is None else z
+    m = bpy.data.materials.get("terra_water") or bpy.data.materials.new("terra_water")
+    m.use_nodes = True
+    b = m.node_tree.nodes["Principled BSDF"]
+    b.inputs["Base Color"].default_value = (0.05, 0.11, 0.13, 1)
+    b.inputs["Roughness"].default_value = 0.06
+    b.inputs["IOR"].default_value = 1.33
+    b.inputs["Transmission Weight"].default_value = 0.4
+    return m
+
+
+def add_water(doc: Document, min_width=3.0, lift=0.5):
+    """川(幅付きリボン、中心の標高+lift で水平断面)と湖(湖セルの面、充填水位)をメッシュ化"""
+    import bpy
+    hf = doc.heightfield()
+    mat = _water_material()
+    col = bpy.context.scene.collection
+    V, F = [], []
+    for ln, pr in doc.vectors.get("rivers", []):
+        xy = np.asarray(ln.coords)
+        if len(xy) < 2:
+            continue
+        tan = np.gradient(xy, axis=0)
+        tan /= np.maximum(np.linalg.norm(tan, axis=1, keepdims=True), 1e-9)
+        nrm = np.stack([-tan[:, 1], tan[:, 0]], 1)
+        w = max(pr["width"], min_width) / 2
+        zc = hf.sample(xy[:, 0], xy[:, 1])
+        zc = zc + lift
+        b0 = len(V)
+        for p, n, z in zip(xy, nrm, zc):
+            V += [(p[0] + n[0] * w, p[1] + n[1] * w, z), (p[0] - n[0] * w, p[1] - n[1] * w, z)]
+        F += [(b0 + 2 * i, b0 + 2 * i + 1, b0 + 2 * i + 3, b0 + 2 * i + 2) for i in range(len(xy) - 1)]
+    if "lake" in doc.layers and doc.layers["lake"].any():
+        g = doc.grid
+        X, Y = g.xy()
+        lk = doc.layers["lake"]
+        jj, ii = np.nonzero(lk)
+        zl = doc.layers["filled"][jj, ii] if "filled" in doc.layers else doc.height[jj, ii]
+        h = g.res / 2
+        for j, i, z in zip(jj, ii, zl):
+            b0 = len(V)
+            x, y = X[j, i], Y[j, i]
+            V += [(x - h, y - h, z), (x + h, y - h, z), (x + h, y + h, z), (x - h, y + h, z)]
+            F.append((b0, b0 + 1, b0 + 2, b0 + 3))
+    if not V:
+        return None
+    me = bpy.data.meshes.new("water")
+    me.from_pydata(V, [], F)
+    me.materials.append(mat)
+    o = bpy.data.objects.new("water", me)
+    col.objects.link(o)
+    return o
+
+
+def add_far_plane(doc, z=None):
+    """水平線までの遠景: 森の色の巨大平面(コンポジタの霞で空へ溶ける)。z=None は最低標高-5m"""
+    import bpy
+    z = float(doc.height.min()) - 5 if z is None else z
     me = bpy.data.meshes.new("far")
     me.from_pydata([(-6e4, -6e4, z), (6e4, -6e4, z), (6e4, 6e4, z), (-6e4, 6e4, z)], [], [(0, 1, 2, 3)])
     mat = bpy.data.materials.new("far")
@@ -275,7 +331,7 @@ def add_far_plane(doc, z=None):
     bpy.context.scene.collection.objects.link(o)
 
 
-def estimate_ev(target=0.28):
+def estimate_ev(target=0.2):
     """低解像度の試し撮り(EV-4 で飽和を避ける)の下半分(地面)の線形輝度の中央値から露出[EV]を決める。地形は日向が明るく vt の自動露出だと飽和する"""
     import tempfile
     import bpy
@@ -296,7 +352,7 @@ def estimate_ev(target=0.28):
     return float(np.clip(math.log2(target / max(m, 1e-4)), -8.0, 2.0))
 
 
-def finish(path, ev_target=0.28):
+def finish(path, ev_target=0.2):
     """露出自動決定→描画→写実ポスト(ビネット・粒子)"""
     import bpy
     from vt import render

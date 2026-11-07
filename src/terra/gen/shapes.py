@@ -68,3 +68,14 @@ class Shape(Node):
             else:
                 raise ValueError(f"unknown shape kind {k}")
         doc.set("height", np.maximum(doc.height, h) if p["mode"] == "max" else doc.height + h)
+
+
+@node("gen.tilt")
+class Tilt(Node):
+    """一様な傾斜面(m/m)を足す。slope=[dz/dx, dz/dy]。盆地が閉じず、水が領域の外へ抜ける"""
+    outputs = ("height",)
+    defaults = dict(slope=[-0.1, -0.1])
+
+    def run(self, doc, rng):
+        X, Y = doc.grid.xy()
+        doc.set("height", doc.height + self.params["slope"][0] * (X - X.mean()) + self.params["slope"][1] * (Y - Y.mean()))

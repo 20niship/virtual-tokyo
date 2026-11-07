@@ -19,3 +19,21 @@
 - [x] scripts/terra_render.py(vt.render の写実カメラ: 60mm 俯瞰 F8 / 28mm 目線 F5.6, DoF, ブルーム, ビネット, 粒子)
 - 検証: 実 DEM 標高 1446〜2509m・最大傾斜 63度(傾斜・曲率が不自然でない。林道のヘアピンが DEM に出ている)。`tests/terra/test_t1.py` 5 件(ノイズ決定性、キャッシュ、傾斜/向きの解析解、スタンプ、GSI 画素デコード)
 - 画像: `out/terra/t1/{alps,fuji,mixed}_top.png`(ハイトシェード), `{alps,fuji}_oblique.png`, `{alps,fuji}_ground.png`。JPG は `out/terra/gallery/`
+
+## T2 侵食と水系 — 完了
+- [x] erosion/hydraulic(格子パイプモデル, Numba 並列・決定的), erosion/thermal(安息角, Jacobi 方式で質量保存), erosion/fluvial(ストリームパワー則の陰解法。粗い格子で解き変化量だけ補間、窪地を先に充填して樹枝状の谷網にする)
+- [x] hydro/flow(priority-flood+ε, D8, 流量=上流面積, TWI), hydro/rivers(合流点ごとの折れ線・幅・流量・Strahler 次数), 湖(充填深さ・面積の閾値)
+- [x] 実 DEM は `mode: derive`(hydraulic の高さを据え置く)に対応
+- 性能(2km 角・2m 格子 1000x1000, 12 コア): fluvial 2.5s / hydraulic(120 反復)4.5s / thermal 0.6s / hydro.flow 0.3s、全ステップ合計 約 8 秒(JIT キャッシュ後)
+- 検証(tests/terra/test_t2.py 5 件): 全セルが厳密に下流へ下る、出口の流量合計 = 全面積(保存)、全セルが境界へ到達、川の始点>終点標高、窪地→湖、侵食の決定性と熱侵食の質量保存
+- 実 DEM(奥多摩 2km, 4m 格子)との統計比較(`scripts/terra_stats.py`):
+
+| 指標 | 仮想(侵食後) | 実 DEM |
+|---|---|---|
+| 傾斜 中央値/90% [度] | 37〜41 / 53〜55 | 43 / 55 |
+| 河川密度 [km/km²](0.03km² 以上) | 3.4〜3.8 | 3.3 |
+| 河川の本数 / 最大次数 | 66〜68 / 3 | 67 / 3 |
+| 最大流域 [km²] | 2.6 | 3.3 |
+| 標高の電力スペクトル傾き | -4.7 | -4.4 |
+- 画像: `out/terra/t2/{v2k_top,v2k_oblique,v2k_ground,okutama_top,stats}.png`、動画 `out/terra/t2/v2k_orbit.mp4`(H.264 yuv420p 1280x720 708KB)。JPG は `out/terra/gallery/t2_*.jpg`
+- 既知の課題: 水力侵食に格子軸方向の筋が残る。陰影は T3 の材質で目立たなくなる
