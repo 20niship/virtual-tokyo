@@ -37,3 +37,20 @@
 | 標高の電力スペクトル傾き | -4.7 | -4.4 |
 - 画像: `out/terra/t2/{v2k_top,v2k_oblique,v2k_ground,okutama_top,stats}.png`、動画 `out/terra/t2/v2k_orbit.mp4`(H.264 yuv420p 1280x720 708KB)。JPG は `out/terra/gallery/t2_*.jpg`
 - 既知の課題: 水力侵食に格子軸方向の筋が残る。陰影は T3 の材質で目立たなくなる
+
+## T3 バイオームと散布 — 完了
+- [x] biome/jp_forest(標高・緯度・気温・傾斜・向き・TWI から 照葉樹林→落葉広葉樹林→亜高山針葉樹林→ハイマツ→高山荒原、岩、湿地/草地。境界高度は気候でずらす。soil_depth・bedrock・canopy・splat 6 層も出力)
+- [x] scatter/(Bridson ポアソンディスク(Numba)+密度マスク+除外領域(川・湖・道路・送電線の幅+余裕。road/powerline は T4/T5 でベクタが入ると自動で効く))
+  - scatter.trees: vt の植栽 module(veg_shii/kusunoki/keyaki/tokaikaede/sakura/kuromatsu)+針葉樹 terra_sugi/shirabiso(`modules/lib_forest.py`、vt の tree_gen を使用)
+  - scatter.shrubs: ツツジ・ツゲ・アジサイ・草。scatter.rocks: 崖パネル・崖下の転石(扇状)・露頭・巨礫・川沿いの礫
+- [x] modules/lib_rock.py(boulder 12 種, outcrop 3, scree 3, pebble 3, cliff 3 = 手続き生成、PBR 材質 rock_*、1 module 1 usdc、`assets/terra/modules/`)。テクスチャ(rock_cliff / forest_litter / alpine_turf, 512px タイル可能, 計 1MB)は `scripts/terra_textures.py` で生成
+- [x] export/usd.py(地形タイル 250 セル角を UsdGeomMesh+頂点色の焼き込み、水面、散布は PointInstancer(module は usdc 参照))、export_splat(splat0/1.png + splat.json)
+- [x] scripts/terra_render.py(--look photoreal = vt.render の写実カメラ: 60mm 俯瞰 F8 / 28mm 目線 F5.6、DoF、ブルーム、ビネット、粒子)、scripts/terra_video.py
+- 検証(仮想 2km 角・2m 格子 `recipes/terra/virtual_2km.yaml`):
+  - 散布数: 木 約 135,000 + 低木・草 約 108,000 + 岩 約 4,000〜28,000 = 約 27 万インスタンス(PointInstancer 3 つ)
+  - 生成時間: 全ステップ 約 10 秒(侵食 7s、散布 5s)。USD 44MB(地形 100 万四角形が大半)
+  - Blender(Cycles)でレンダ可: 1280x720・32spp、27 万インスタンスを Geometry Nodes でインスタンス化。樹木は 150m 以内を高ポリ、外を低ポリ(約 1/5)
+  - 生成した USD を Blender 5.0.1 へ `wm.usd_import` で読み込み可(地形 998,001 四角形、インスタンス展開 130 万)
+  - tests/terra/test_t3.py: ポアソン最小間隔・決定性、植生帯が標高順で気候により上下、散布が川・湖に入らず接地、岩 module と USD(PointInstancer 総数=散布数)
+- 画像: `out/terra/t3/{v2k_top,v2k_biome,v2k_oblique,v2k_ground}.png`、動画 `out/terra/t3/v2k_fly.mp4`(川沿いフライスルー)。JPG は `out/terra/gallery/t3_*.jpg`
+- 既知の課題: 急斜面の裸地は材質が単調(岩テクスチャの強調が必要)。崖パネルは斜面に半分埋め込む配置だが数を絞っている。水力侵食の格子軸方向の筋。針葉樹の葉は広葉の葉アトラスを流用(針葉カードが無い)

@@ -1,4 +1,4 @@
-# 仮想 2km 角・2m 格子(T2/T3 の主検証地形): 侵食 → 水系
+# 仮想 2km 角・2m 格子(T2/T3 の主検証地形): 侵食 → 水系 → バイオーム → 木・低木・岩の散布
 seed: 7
 grid: {size_m: 2000, res_m: 2, crs: local}
 climate: {lat: 36.0, sea_level_temp_c: 15, precip_mm: 2000, wind_dir_deg: 270}
@@ -13,4 +13,8 @@ steps:
   - hydro.flow: {}
   - hydro.rivers: {min_area_km2: 0.03}
   - hydro.lakes: {min_depth: 3.0, min_area_m2: 8000}
-export: {heightmap: png16, geotiff: true}
+  - biome.jp_forest: {}
+  - scatter.trees: {r_m: 3.6, exclude: [road, river, lake, powerline]}
+  - scatter.shrubs: {r_m: 2.6}
+  - scatter.rocks: {cliff_deg: 54}
+export: {heightmap: png16, geotiff: true, usd: true, splat: true}

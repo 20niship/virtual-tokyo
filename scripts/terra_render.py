@@ -18,7 +18,8 @@ ap.add_argument("--no-dof", action="store_true")
 ap.add_argument("--stride", type=int, default=1, help="地形メッシュの間引き")
 ap.add_argument("--no-water", action="store_true")
 ap.add_argument("--no-scatter", action="store_true")
-ap.add_argument("--splat", action="store_true", help="biome の splat 材質(w0/w1)を使う")
+ap.add_argument("--no-splat", action="store_true", help="biome があっても頂点色表示にする")
+ap.add_argument("--hi-dist", type=float, default=150.0, help="樹木を高ポリにする距離[m]")
 ap.add_argument("--time", default="day")
 ap.add_argument("--pose", default="", help="カメラ直指定 'x,y,z,tx,ty,tz'")
 a = ap.parse_args()
@@ -38,21 +39,19 @@ views = ["oblique", "ground"] if "all" in a.view else a.view
 for v in views:
     vr.PHOTO = a.look == "photoreal"
     R.photo_setup(doc, res, a.samples, a.time)
-    splat = None
-    if a.splat and "splat_w0" in doc.layers:
-        splat = dict(w0=doc.layers["splat_w0"], w1=doc.layers["splat_w1"])
+    splat = R.splat_from_doc(doc) if not a.no_splat else None
     R.terrain_object(doc, box=box, stride=a.stride, splat=splat)
     R.add_far_plane(doc)
     if not a.no_water:
         R.add_water(doc)
-    if doc.scatter and not a.no_scatter:
-        from terra.export.scatter_assets import load_protos
-        n = R.add_scatter(doc, load_protos(doc))
-        print("instances:", n)
     pose = None
     if a.pose:
         p = [float(x) for x in a.pose.split(",")]
         pose = (tuple(p[:3]), tuple(p[3:]))
-    R.make_camera(doc, v, box, a.lens, a.fstop, not a.no_dof, pose=pose)
+    cam = R.make_camera(doc, v, box, a.lens, a.fstop, not a.no_dof, pose=pose)
+    if doc.scatter and not a.no_scatter:
+        from terra.export.scatter_assets import load_protos
+        n = R.add_scatter(doc, load_protos(doc), tuple(cam.location), a.hi_dist)
+        print("instances:", n)
     ev = R.finish(out / f"{name}_{v}.png")
     print(f"{v}: exposure {ev:+.2f} EV -> {out / f'{name}_{v}.png'}")

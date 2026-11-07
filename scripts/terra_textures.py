@@ -35,7 +35,7 @@ def rock():
     strata = 0.5 + 0.5 * np.sin(2 * np.pi * (6 * y + 1.5 * fbm(2, 3.0)))        # 水平な層理(周期=6 本)
     crack = np.abs(fbm(3, 2.0) - 0.5)
     crack = np.clip(1 - crack / 0.018, 0, 1)                                     # 細い割れ目
-    base = mix(np.array([0.30, 0.28, 0.26]), np.array([0.58, 0.55, 0.50]), np.clip(0.55 * h + 0.3 * strata + 0.15 * fbm(4, 1.2), 0, 1))
+    base = mix(np.array([0.20, 0.19, 0.17]), np.array([0.44, 0.41, 0.37]), np.clip(0.55 * h + 0.3 * strata + 0.15 * fbm(4, 1.2), 0, 1))
     lich = np.clip((fbm(5, 2.8) - 0.62) * 6, 0, 1) * (fbm(6, 1.0) > 0.45)
     c = mix(base, np.array([0.45, 0.50, 0.30]), lich * 0.5)
     c = c * (1 - 0.55 * crack[..., None])

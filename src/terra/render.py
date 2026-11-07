@@ -180,47 +180,84 @@ def terrain_material_splat():
     return m
 
 
-def add_scatter(doc: Document, protos: dict, kinds_per_scatter=None):
-    """doc.scatter の各エントリ(pos,yaw,scale,kind)→ アセットごと 1 オブジェクト(点群)+GN インスタンス。
-    protos: {asset 名: vt 形式の Mesh}。doc.scatter[k]['asset_idx'] が names 配列(doc.meta['assets'][k])の添字。"""
+def splat_from_doc(doc):
+    """splat_* 層(6 枚)→ 頂点属性 w0=(grass,litter,rock) w1=(scree,soil,alpine)。無ければ None"""
+    if "splat_grass" not in doc.layers:
+        return None
+    L = [doc.layers["splat_" + n] for n in SPLAT]
+    one = np.ones_like(L[0])
+    return dict(w0=np.stack(L[:3] + [one], -1), w1=np.stack(L[3:] + [one], -1))
+
+
+def add_scatter(doc: Document, protos: dict, cam=None, hi_dist=150.0):
+    """doc.scatter の各エントリ → アセットごとに点群 1 オブジェクト+Geometry Nodes のインスタンス化(vt と同方式)。
+    樹木は cam(x,y,z) から hi_dist 以内は高ポリ、外は低ポリ('名前|lo')。pitch は X 軸回り(崖パネルの傾き)"""
     import bpy
     from vt import render
     col = bpy.context.scene.collection
     n_inst = 0
     for sk, s in doc.scatter.items():
-        names = doc.meta["assets"][sk]
+        names = [str(n) for n in s["assets"]]
+        dist = np.hypot(s["pos"][:, 0] - cam[0], s["pos"][:, 1] - cam[1]) if cam is not None else np.zeros(len(s["pos"]))
         for ai, an in enumerate(names):
-            sel = s["kind"] == ai
-            if not sel.any():
-                continue
-            src = bpy.data.objects.new(f"{sk}_{an}_src", render.mesh_to_bpy(an, protos[an]))
-            col.objects.link(src)
-            src.hide_render = src.hide_viewport = True
-            pts = bpy.data.meshes.new(f"{sk}_{an}_pts")
-            n = int(sel.sum())
-            pts.vertices.add(n)
-            pts.vertices.foreach_set("co", s["pos"][sel].astype(np.float32).ravel())
-            rot = np.zeros((n, 3), np.float32)
-            rot[:, 2] = s["yaw"][sel]
-            scl = s["scale"][sel].astype(np.float32)
-            if scl.ndim == 1:
-                scl = np.repeat(scl[:, None], 3, 1)
-            for nm, v in (("rot", rot), ("scl", scl)):
-                a = pts.attributes.new(nm, "FLOAT_VECTOR", "POINT")
-                a.data.foreach_set("vector", v.ravel())
-            a = pts.attributes.new("bvar", "FLOAT", "POINT")
-            a.data.foreach_set("value", np.full(n, 0.5, np.float32))
-            o = bpy.data.objects.new(f"{sk}_{an}", pts)
-            col.objects.link(o)
-            g, oi = render._gn_group(f"gn_{sk}_{an}")
-            oi.inputs["Object"].default_value = src
-            o.modifiers.new("inst", "NODES").node_group = g
-            n_inst += n
+            base = s["kind"] == ai
+            for lod in (0, 1):
+                if lod and an + "|lo" not in protos:
+                    continue
+                sel = base & ((dist < hi_dist) if (an + "|lo" in protos and not lod) else (dist >= hi_dist) if lod else True)
+                if not sel.any():
+                    continue
+                key = an + "|lo" if lod else an
+                src = bpy.data.objects.new(f"{sk}_{key}_src", render.mesh_to_bpy(key, protos[key]))
+                col.objects.link(src)
+                src.hide_render = src.hide_viewport = True
+                pts = bpy.data.meshes.new(f"{sk}_{key}_pts")
+                n = int(sel.sum())
+                pts.vertices.add(n)
+                pts.vertices.foreach_set("co", s["pos"][sel].astype(np.float32).ravel())
+                rot = np.zeros((n, 3), np.float32)
+                rot[:, 0] = s["pitch"][sel] if "pitch" in s else 0
+                rot[:, 2] = s["yaw"][sel]
+                scl = np.repeat(s["scale"][sel].astype(np.float32)[:, None], 3, 1)
+                for nm, v in (("rot", rot), ("scl", scl)):
+                    a = pts.attributes.new(nm, "FLOAT_VECTOR", "POINT")
+                    a.data.foreach_set("vector", v.ravel())
+                a = pts.attributes.new("bvar", "FLOAT", "POINT")
+                a.data.foreach_set("value", np.full(n, 0.5, np.float32))
+                o = bpy.data.objects.new(f"{sk}_{key}", pts)
+                col.objects.link(o)
+                g, oi = render._gn_group(f"gn_{sk}_{key}")
+                oi.inputs["Object"].default_value = src
+                o.modifiers.new("inst", "NODES").node_group = g
+                n_inst += n
     return n_inst
+
+
+def _patch_textures():
+    """vt.render._image が assets/terra/textures も探すようにする(vt のコードは変更しない)"""
+    from pathlib import Path
+
+    from vt import render
+    if getattr(render, "_terra_patched", False):
+        return
+    orig, tdir = render._image, Path(__file__).resolve().parents[2] / "assets/terra/textures"
+
+    def _image(name, noncolor=False):
+        if (tdir / name).exists() and (name, noncolor) not in render._img_cache:
+            import bpy
+            im = bpy.data.images.load(str(tdir / name))
+            if noncolor:
+                im.colorspace_settings.name = "Non-Color"
+            render._img_cache[(name, noncolor)] = im
+        return orig(name, noncolor) if (name, noncolor) not in render._img_cache else render._img_cache[(name, noncolor)]
+    render._image = _image
+    render._terra_patched = True
 
 
 def photo_setup(doc, res, samples, time="day"):
     from vt import render
+    from . import modules  # noqa: F401  (rock_* 材質を vt.materials へ登録)
+    _patch_textures()
     render.HAZE_K["day"] = 5e-5      # 山岳は数 km 先まで見えるので都市用(1.6e-4)より薄く: 5km で約22%
     return render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65), time=time, realism=True)
 
@@ -272,12 +309,9 @@ def _water_material():
     return m
 
 
-def add_water(doc: Document, min_width=3.0, lift=0.5):
-    """川(幅付きリボン、中心の標高+lift で水平断面)と湖(湖セルの面、充填水位)をメッシュ化"""
-    import bpy
+def water_geometry(doc: Document, min_width=3.0, lift=0.5):
+    """川(幅付きリボン、中心の標高+lift で水平断面)と湖(湖セルの面、充填水位)の頂点・四角形"""
     hf = doc.heightfield()
-    mat = _water_material()
-    col = bpy.context.scene.collection
     V, F = [], []
     for ln, pr in doc.vectors.get("rivers", []):
         xy = np.asarray(ln.coords)
@@ -305,8 +339,16 @@ def add_water(doc: Document, min_width=3.0, lift=0.5):
             x, y = X[j, i], Y[j, i]
             V += [(x - h, y - h, z), (x + h, y - h, z), (x + h, y + h, z), (x - h, y + h, z)]
             F.append((b0, b0 + 1, b0 + 2, b0 + 3))
+    return V, F
+
+
+def add_water(doc: Document, **kw):
+    import bpy
+    V, F = water_geometry(doc, **kw)
     if not V:
         return None
+    mat = _water_material()
+    col = bpy.context.scene.collection
     me = bpy.data.meshes.new("water")
     me.from_pydata(V, [], F)
     me.materials.append(mat)

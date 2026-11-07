@@ -19,7 +19,6 @@ ap.add_argument("--res", default="1280x720")
 ap.add_argument("--sweep", type=float, default=100.0, help="orbit の回転角[度]")
 ap.add_argument("--alt", type=float, default=35.0, help="fly の対地高度[m]")
 ap.add_argument("--stride", type=int, default=2, help="地形メッシュの間引き(動画は 2 で十分)")
-ap.add_argument("--splat", action="store_true")
 a = ap.parse_args()
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -33,13 +32,10 @@ doc = Document.load(a.dir)
 res = tuple(int(v) for v in a.res.split("x"))
 vr.PHOTO = True
 R.photo_setup(doc, res, a.samples)
-splat = dict(w0=doc.layers["splat_w0"], w1=doc.layers["splat_w1"]) if a.splat and "splat_w0" in doc.layers else None
+splat = R.splat_from_doc(doc)
 R.terrain_object(doc, splat=splat, stride=a.stride)
 R.add_far_plane(doc)
 R.add_water(doc)
-if doc.scatter:
-    from terra.export.scatter_assets import load_protos
-    print("instances:", R.add_scatter(doc, load_protos(doc)))
 g = doc.grid
 cx, cy = g.x0 + g.nx * g.res / 2, g.y0 + g.ny * g.res / 2
 half = g.nx * g.res / 2
@@ -47,6 +43,9 @@ hf = doc.heightfield()
 zat = lambda x, y: float(hf.sample(np.array([x]), np.array([y]))[0])
 cam = vr.add_camera((cx, cy, 500), (cx, cy, 0), 40 if a.mode == "orbit" else 28)
 cam.data.clip_end = 60000
+if doc.scatter:
+    from terra.export.scatter_assets import load_protos
+    print("instances:", R.add_scatter(doc, load_protos(doc), (cx, cy), half * 1.5 if a.mode == "orbit" else 200))
 if a.mode == "fly":
     lines = sorted(doc.vectors["rivers"], key=lambda t: -t[0].length)
     pts = np.concatenate([np.asarray(ln.coords) for ln, _ in lines[:1]])
