@@ -60,3 +60,11 @@ near スポット(220m 角 = 4.84 ha)の散布密度(`make_near_doc` の出力 /
 - 苔・地衣類の module は面単位の材質割り当てで、斑の縁が三角形になる(細分化で緩和)。
 - near の散布で、木の密度は far と同じ(樹冠下を見せるため)。木そのものの near 専用の高精細モデルは未作成。
 - `instance_faces_total` はインスタンスの総面数の概算(Cycles が実際に確保するメモリではない)。
+
+## 超高ポリ module(`_hi`、近影用)
+
+数 m 先の近影レンダ向け。near(転石 320 面)に対し、転石 2〜8 万面・露頭 8〜10 万面・崖 2.2 万面・土パッチ 1.7 万面(1.5cm 格子)。名前は `rock_<岩種>_<形>_<v>_hi` / `soil_<種>_patch_<v>_hi`。
+- 球(icosphere 5〜6 分割)を岩種の形に切り出した後、岩種ごとの粗さの fBm(角張る・層理・溶食は稜線型)を法線方向へ変位し、割れ目の溝を足す(`lib_rock_geo.hi_detail`)。苔・地衣類の斑も面が細かいので境界が細かくなる(#13 の緩和)。
+- スムーズシェーディング。土パッチは粒・小石の凹凸(`lib_soil`)。
+- 生成: `scripts/terra_modules_hi.py`(代表セットは `assets/terra/modules/*_hi.usdc` にコミット、`--all` で全て)。カタログ: `scripts/terra_modules_sheet.py hi [--only granite,andesite --cols 3]`。
+- 散布(`scatter_assets`)は従来どおり near/far のみ。`_hi` は近影で手置きする用途。
