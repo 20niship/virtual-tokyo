@@ -24,7 +24,7 @@ def _patch(kind, v, lod):
     amp, fq = PARAM[kind]
 
     def fn(m, W, H, rng):
-        n = 32 if lod == "near" else 6
+        n = {"near": 32, "far": 6, "hi": 200}[lod]      # hi: 1.5cm 格子(約 4 万四角形)+粒・小石の微細起伏
         xs = np.linspace(-1.5, 1.5, n + 1)
         nz = _noise_dir(rng, 7)
         X, Y = np.meshgrid(xs, xs)
@@ -44,6 +44,11 @@ def _patch(kind, v, lod):
             h -= 0.07 * np.exp(-((Y + 0.55) / 0.13) ** 2)
         if kind == "humus":                                                      # 落ち葉の盛り上がり
             h += 0.03 * np.clip(_noise_dir(rng, 9)(np.stack([X, Y, X * 0 + v], -1).reshape(-1, 3) * 2.5).reshape(X.shape) - 0.2, 0, 1)
+        if lod == "hi":
+            from .lib_rock_geo import _fbm
+            P3 = np.stack([X.ravel(), Y.ravel(), np.full(X.size, v * 0.7)], -1)
+            h = h + amp * 0.16 * _fbm(P3, rng, 0.5, 0.04, kind in ("scoria", "masa", "clay")).reshape(X.shape)       # 土の粒・小石の凹凸
+            h = h + amp * 0.03 * _fbm(P3, rng, 0.06, 0.03, True, 3).reshape(X.shape)
         th = np.arctan2(Y, X)
         lim = 1.5 * (0.72 + 0.14 * np.sin(3 * th + 2 * v) + 0.1 * np.sin(5 * th + 1))     # 縁は不規則な円形(四角いタイルに見えない)
         edge = np.clip((lim - np.hypot(X, Y)) / 0.4, 0, 1)                         # 縁を 0 へ(地面になじませる)
@@ -91,8 +96,9 @@ def _clod(kind, v, lod):
 
 for _k in SOILS:
     for _v in range(3):
-        for _lod in ("near", "far"):
-            _s = "" if _lod == "near" else "_far"
+        for _lod in ("near", "far", "hi"):
+            _s = {"near": "", "far": "_far", "hi": "_hi"}[_lod]
             reg(f"soil_{_k}_patch_{_v}{_s}", _patch(_k, _v, _lod), W=3.0, H=0.15, cat="土", lod=_lod, kind=_k)
-            reg(f"soil_{_k}_clod_{_v}{_s}", _clod(_k, _v, _lod), W=0.4, H=0.15, cat="土", lod=_lod, kind=_k)
+            if _lod != "hi":
+                reg(f"soil_{_k}_clod_{_v}{_s}", _clod(_k, _v, _lod), W=0.4, H=0.15, cat="土", lod=_lod, kind=_k)
 _ = math

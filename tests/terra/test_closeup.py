@@ -32,7 +32,7 @@ def test_modules_catalog_and_lod():
     assert len([n for n in names if n.startswith("rock_") and n.count("_") >= 3]) >= 100
     kinds = {n.split("_")[1] for n in names if n.startswith("rock_") and n.split("_")[1] in ("granite", "andesite", "sandstone", "limestone", "tuff", "river")}
     assert len(kinds) == 6
-    assert len([n for n in names if n.startswith("soil_") and "patch" in n and not n.endswith("far")]) == len(SOILS) * 3
+    assert len([n for n in names if n.startswith("soil_") and "patch" in n and not n.endswith(("far", "_hi"))]) == len(SOILS) * 3
     for n in ("rock_granite_boulder_m_1", "rock_sandstone_outcrop_2", "rock_andesite_column_0", "soil_clay_patch_0", "gravel_patch_talus_1", "gravel_stone_round_cobble_2"):
         near, far = tm.build(n), tm.build(n + "_far")
         assert len(near.f) > len(far.f) > 0                            # near は far より面が多い
@@ -112,3 +112,15 @@ def test_clear_view_removes_trees_near_camera(tmp_path):
     D.clear_view(near, loc, tgt)
     p = near.scatter["trees"]["pos"][:, :2] - np.array(loc[:2])
     assert (np.linalg.norm(p, axis=1) >= 4.5).all()
+
+
+def test_hi_modules_are_much_denser_and_valid():
+    for n in ("rock_granite_boulder_s_1", "rock_seashore_outcrop_1", "rock_andesite_boulder_s_2"):
+        near, hi = tm.build(n), tm.build(n + "_hi")
+        assert len(hi.f) > 20 * len(near.f) and len(hi.f) > 20000                    # near よりずっと高ポリ
+        assert np.isfinite(np.array(hi.v)).all() and set(hi.m) <= set(MATERIALS)
+        assert len(set(hi.m)) >= 4                                                    # 色ムラ・窪み・稜線などで材質が分かれる
+    mossy, fresh = tm.build("rock_granite_boulder_s_4_hi"), tm.build("rock_granite_boulder_s_0_hi")
+    assert mossy.m.count("rkh_granite_moss") + mossy.m.count("rkh_granite_moss_dry") > 5 * (fresh.m.count("rkh_granite_moss") + 1)     # 苔に覆われた状態は苔が多い
+    big = np.array(tm.build("rock_andesite_boulder_s_1_hi").v)
+    assert np.ptp(big[:, 2]) > 0.15                                                   # 彫刻で潰れない

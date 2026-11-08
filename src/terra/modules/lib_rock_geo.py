@@ -7,16 +7,18 @@ import numpy as np
 from vt import tree_gen as _tg
 from vt.materials import MATERIALS as _MAT
 
+from . import lib_rock_sdf as _sdf
 from .lib_rock import _ICO, _ico, _noise_dir
 from .registry import reg
 from .registry import tex as _tex
 
 KINDS = {   # shape: round(丸い)/angular(角)/slab(板状・層理)/karst(溶食)/soft(崩れやすい)、cuts=切り落とし面数、rough=歪み、flat=扁平率
     "granite": dict(ja="花崗岩", tex="rock_granite.png", tint="#b8b6b0", size=2.4, shape="round", cuts=5, rough=0.13, flat=0.78),
-    "andesite": dict(ja="安山岩/玄武岩", tex="rock_basalt.png", tint="#b0b0b4", size=3.0, shape="angular", cuts=10, rough=0.20, flat=0.72),
+    "andesite": dict(ja="安山岩/玄武岩", tex="rock_basalt.png", hi_gain=2.1, tint="#b0b0b4", size=3.0, shape="angular", cuts=10, rough=0.20, flat=0.72),
     "sandstone": dict(ja="砂岩/泥岩", tex="rock_sandstone.png", tint="#e6d8c0", size=2.0, shape="slab", cuts=8, rough=0.12, flat=0.5),
     "limestone": dict(ja="石灰岩", tex="rock_limestone.png", tint="#f0eee8", size=2.6, shape="karst", cuts=6, rough=0.22, flat=0.7),
     "tuff": dict(ja="凝灰岩", tex="rock_tuff.png", tint="#e0d8c0", size=2.4, shape="soft", cuts=4, rough=0.20, flat=0.75),
+    "seashore": dict(ja="海辺の岩(波食・穴だらけ)", tex="rock_granite.png", hi_gain=0.78, tint="#c8c6c0", size=2.4, shape="coastal", cuts=8, rough=0.18, flat=0.65),
     "river": dict(ja="川原の丸石", tex="rock_river.png", tint="#d0ccc4", size=1.0, shape="round", cuts=0, rough=0.06, flat=0.62),
 }
 STATES = [
@@ -24,12 +26,14 @@ STATES = [
     dict(name="weathered", ja="風化・地衣類", weathering=0.6, moss=0.1, lichen=0.55, chipped=0.1, grass=0, soil=0.2),
     dict(name="mossy", ja="苔むし・草", weathering=0.7, moss=0.9, lichen=0.15, chipped=0.0, grass=3, soil=0.6),
     dict(name="stained", ja="水染み・汚れ", weathering=0.5, moss=0.25, lichen=0.1, chipped=0.15, grass=1, soil=0.3),
+    dict(name="overgrown", ja="苔に厚く覆われた", weathering=0.45, moss=1.0, lichen=0.2, chipped=0.0, grass=2, soil=0.5),
 ]
 for _k, _s in KINDS.items():
     _MAT[f"rk_{_k}"] = _tex(_s["tex"], _s["size"], 0.92 if _k != "river" else 0.6, 0.8, tint=_s["tint"])
     _MAT[f"rk_{_k}_fresh"] = _tex(_s["tex"], _s["size"], 0.9, 0.7, tint="#ffffff")
     _MAT[f"rk_{_k}_lichen"] = _tex(_s["tex"], _s["size"], 0.95, 0.9, tint="#b9b27a")
     _MAT[f"rk_{_k}_stain"] = _tex(_s["tex"], _s["size"], 0.9, 0.8, tint="#6a625a")
+_sdf.register_materials(KINDS)
 _MAT["rk_moss"] = _tex("moss.png", 0.5, 0.98, 1.2, tint="#a8ac90")
 _MAT["rk_sediment"] = _tex("soil_humus.png", 0.8, 0.98, 0.6)
 
@@ -97,10 +101,41 @@ def _smoothstep(t):
     return t * t * (3 - 2 * t)
 
 
+def _fbm(P, rng, wl0, wl1, ridged, n=4):
+    """3 次元の fBm(方向ごとの正弦波の和)。波長 wl0 から wl1 まで 1 オクターブごとに半分、振幅は 0.55 倍。ridged=尖った稜線(1-|sin|)"""
+    out, tot, amp, wl = np.zeros(len(P)), 0.0, 1.0, wl0
+    while wl >= wl1:
+        for _ in range(n):
+            k = np.array([rng.gauss(0, 1) for _ in range(3)])
+            k *= 2 * math.pi / wl / np.linalg.norm(k)
+            s = np.sin(P @ k + rng.uniform(0, 6.28))
+            out += amp * ((1 - np.abs(s)) if ridged else s)
+        tot += amp * n
+        amp *= 0.55
+        wl /= 2
+    return out / max(tot, 1e-9)
+
+
+def hi_detail(P, nrm, rng, R, shape, sub):
+    """hi(超高ポリ)の微細起伏: 岩種ごとの粗さの fBm を法線方向へ変位 + 割れ目の溝。最小波長は辺長の約 2.5 倍(これ以下はエイリアスになる)"""
+    wl1 = max(R * 8 / 2 ** sub, 0.01)
+    ridged = shape in ("angular", "slab", "karst")
+    amp = {"round": 0.035, "soft": 0.05, "angular": 0.06, "slab": 0.05, "karst": 0.07, "coastal": 0.07}[shape] * R
+    h = _fbm(P, rng, R * 0.7, wl1, ridged)
+    P = P + nrm * ((h - h.mean()) * amp)[:, None]
+    warp = _fbm(P, rng, R * 0.5, R * 0.1, False, 2)
+    for _ in range(5 if shape in ("angular", "slab") else 2 if shape != "round" else 1):          # 割れ目: 平面状の細い溝
+        n = np.array([rng.gauss(0, 1) for _ in range(3)])
+        n /= np.linalg.norm(n)
+        s = np.sin((P @ n + 0.12 * R * warp) * 2 * math.pi / (R * rng.uniform(0.35, 0.9)) + rng.uniform(0, 6.28))
+        P = P - nrm * (0.02 * R * np.exp(-(s / 0.05) ** 2))[:, None]
+    return P
+
+
 def blob(m, R, rng, kind, st, lod, ctr=(0, 0, 0), sink=0.25, flat=None, sub_cap=4):
-    """岩種の形の塊を追加し、切り落とし面のフラグ列を返す。lod: near=icosphere 2 分割(320 面) / far=1 分割(80 面)"""
+    """岩種の形の塊を追加し、切り落とし面のフラグ列を返す。lod: near=icosphere 2 分割(320 面) / far=1 分割(80 面) / hi=5〜6 分割(2 万〜8 万面)+微細起伏"""
     sp = KINDS[kind]
-    sub = min((4 if R > 1.5 else 3 if R > 0.5 else 2), sub_cap) if lod == "near" else 1
+    sub = min((4 if R > 1.5 else 3 if R > 0.5 else 2), sub_cap) if lod == "near" else min(6 if R > 1.0 else 5, sub_cap) if lod == "hi" else 1
     if sub not in _ICO:
         _ICO[sub] = _ico(sub)
     V, F = _ICO[sub]
@@ -125,6 +160,8 @@ def blob(m, R, rng, kind, st, lod, ctr=(0, 0, 0), sink=0.25, flat=None, sub_cap=
         step = max(R * 0.3, 0.05)
         t = P[:, 2] / step
         P[:, 2] = (np.floor(t) + _smoothstep((t - np.floor(t)) * 1.6 - 0.3)) * step * 0.5 + P[:, 2] * 0.5
+    if lod == "hi":
+        P = hi_detail(P, d, rng, R, sp["shape"], sub)
     P[:, 2] -= sink * R * sp["flat"]
     P += np.array(ctr)
     base = len(m.v)
@@ -172,16 +209,25 @@ def _rock_fn(kind, form, v, lod):
     st = STATES[v]
 
     def fn(m, W, H, rng):
-        m.smooth = KINDS[kind]["shape"] in ("round", "soft", "karst")
+        hi = lod == "hi"
+        if hi and kind != "river":                                                                 # 超高ポリ: SDF 彫刻(lib_rock_sdf)
+            sh = KINDS[kind]["shape"]
+            if form == "outcrop":
+                _sdf.build(m, kind, sh, st, rng, 1.8, "outcrop", None)
+            else:
+                R = {"s": 0.35, "m": 0.9, "l": 2.2}[form[-1]]
+                _sdf.build(m, kind, sh, st, rng, R, "boulder", (rng.uniform(0.85, 1.3), rng.uniform(0.85, 1.3), KINDS[kind]["flat"] * rng.uniform(0.9, 1.4)))
+            return
+        m.smooth = hi or KINDS[kind]["shape"] in ("round", "soft", "karst")
         if form == "column":
             cf = column_bundle(m, 1.0, rng, kind, lod)
         elif form == "outcrop":
             cf = []
-            for _ in range((3 + v) if lod == "near" else 2):
-                cf += blob(m, rng.uniform(1.3, 2.3), rng, kind, st, lod, ctr=(rng.uniform(-1.8, 1.8), rng.uniform(-1.4, 1.4), rng.uniform(0, 0.8)), sink=0.3, flat=KINDS[kind]["flat"] * 0.65, sub_cap=3)
+            for _ in range(2 if lod == "far" else 3 + v):
+                cf += blob(m, rng.uniform(1.3, 2.3), rng, kind, st, lod, ctr=(rng.uniform(-1.8, 1.8), rng.uniform(-1.4, 1.4), rng.uniform(0, 0.8)), sink=0.3, flat=KINDS[kind]["flat"] * 0.65, sub_cap=5 if hi else 3)
         else:
-            cf = blob(m, {"s": 0.35, "m": 0.9, "l": 2.2}[form[-1]], rng, kind, st, lod)
-        apply_state(m, kind, rng, st, cf, grass=lod == "near" and form != "boulder_s")
+            cf = blob(m, {"s": 0.35, "m": 0.9, "l": 2.2}[form[-1]], rng, kind, st, lod, sub_cap=6 if hi else 4)
+        apply_state(m, kind, rng, st, cf, grass=lod != "far" and form != "boulder_s")
     return fn
 
 
@@ -189,11 +235,15 @@ def _cliff_geo(kind, v, lod):
     st = STATES[v]
 
     def fn(m, W, H, rng):
-        nx, nz = (28, 18) if lod == "near" else (10, 7)
+        if lod == "hi" and kind != "river":
+            _sdf.build_cliff(m, kind, KINDS[kind]["shape"], st, rng, W, H, v)
+            return
+        nx, nz = {"near": (28, 18), "far": (10, 7), "hi": (180, 120)}[lod]
         shape = KINDS[kind]["shape"]
+        m.smooth = lod == "hi"
         xs, zs = np.linspace(-W / 2, W / 2, nx + 1), np.linspace(0, H, nz + 1)
         n_ = _noise_dir(rng, 8)
-        lf, la = {"slab": (2.6, 0.5), "angular": (1.4, 0.25), "round": (0.9, 0.15), "karst": (1.8, 0.3), "soft": (1.2, 0.3)}[shape]
+        lf, la = {"slab": (2.6, 0.5), "angular": (1.4, 0.25), "round": (0.9, 0.15), "karst": (1.8, 0.3), "soft": (1.2, 0.3), "coastal": (2.0, 0.35)}[shape]
         P = np.zeros((nz + 1, nx + 1, 3))
         for j, z in enumerate(zs):
             ledge = la * math.sin(z * lf + v) + 0.3 * la * math.sin(z * 4.3)
@@ -216,12 +266,12 @@ def _cliff_geo(kind, v, lod):
 
 for _k in KINDS:
     for _v in range(len(STATES)):
-        for _lod in ("near", "far"):
-            _sfx = "" if _lod == "near" else "_far"
+        for _lod in ("near", "far", "hi"):
+            _sfx = {"near": "", "far": "_far", "hi": "_hi"}[_lod]
             for _sz in ("s", "m", "l"):
                 reg(f"rock_{_k}_boulder_{_sz}_{_v}{_sfx}", _rock_fn(_k, f"boulder_{_sz}", _v, _lod), W={"s": 0.8, "m": 2.0, "l": 5.0}[_sz], H={"s": 0.5, "m": 1.2, "l": 3.0}[_sz], lod=_lod, kind=_k)
             if _k != "river":
                 reg(f"rock_{_k}_outcrop_{_v}{_sfx}", _rock_fn(_k, "outcrop", _v, _lod), W=6.0, H=3.0, lod=_lod, kind=_k)
                 reg(f"rock_{_k}_cliff_{_v}{_sfx}", _cliff_geo(_k, _v, _lod), W=14.0, H=9.0, lod=_lod, kind=_k)
-            if _k == "andesite":
+            if _k == "andesite" and _lod != "hi":
                 reg(f"rock_{_k}_column_{_v}{_sfx}", _rock_fn(_k, "column", _v, _lod), W=4.0, H=3.0, lod=_lod, kind=_k)

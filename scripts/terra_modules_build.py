@@ -12,7 +12,7 @@ from terra.modules.lib_rock_geo import KINDS, STATES  # noqa: E402
 from terra.modules.lib_soil import PARAM  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-names = [n for n in M.REG if re.match(r"(rock_(granite|andesite|sandstone|limestone|tuff|river)|soil_|gravel_)", n)]
+names = [n for n in M.REG if re.match(r"(rock_(granite|andesite|sandstone|limestone|tuff|river)|soil_|gravel_)", n) and not n.endswith("_hi")]    # _hi は terra_modules_hi.py
 faces, size = {}, {}
 for n in names:
     m = M.build(n)
