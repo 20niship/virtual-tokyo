@@ -60,7 +60,7 @@ def run_recipe(recipe, seed=None, out=None, cache=True, log=print, grid_over=Non
     r = load_recipe(recipe)
     g = {**r.get("grid", {}), **(grid_over or {})}
     seed = int(r.get("seed", 0) if seed is None else seed)
-    doc = Document(make_grid(g), seed, meta=dict(climate=r.get("climate", {}), center_lonlat=g.get("center_lonlat")))
+    doc = Document(make_grid(g), seed, meta=dict(climate=r.get("climate", {}), center_lonlat=g.get("center_lonlat"), places=r.get("places", {})))
     doc.layers["height"] = np.zeros(doc.grid.shape, np.float32)
     cdir = Path(out or ".") / ".cache"
     if cache:

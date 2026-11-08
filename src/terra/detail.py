@@ -74,6 +74,12 @@ def make_near_doc(doc: Document, center, half=120.0, res=0.5, seed=0, scatter=Tr
     rockw = np.clip(sp.get("rock", 0 * h) + 0.5 * sp.get("scree", 0 * h), 0, 1) if sp else np.zeros(fg.shape)
     soilw = np.clip(sp.get("soil", 0 * h) + sp.get("litter", 0 * h) + sp.get("grass", 0 * h), 0, 1) if sp else np.ones(fg.shape)
     d = micro_relief(fg, rng, rockw, soilw, geo, h, s0) * w
+    if "road" in L:                                                        # 路盤は水平なまま(微細起伏を路面から 1m 離れるまで消す)
+        from scipy.ndimage import distance_transform_edt
+        rd = nn(L["road"]) > 0
+        out.layers["road"] = rd.astype(np.float32)
+        if rd.any():
+            d = d * np.clip((distance_transform_edt(~rd) * res - 1.0) / 6.0, 0, 1)
     out.set("height", h + d)
     slope, aspect = slope_aspect(out.height, res)
     out.set("slope", slope)

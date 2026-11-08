@@ -1,0 +1,28 @@
+# 仮想 2km 角・2m 格子(T4 の検証): 侵食 → 水系 → 2 集落間の道路(橋・トンネル・切土盛土)→ 再接地 → バイオーム → 散布(道路・橋・坑口を除外)
+seed: 7
+grid: {size_m: 2000, res_m: 2, crs: local}
+places: {village_a: [0.608, 0.463], village_b: [0.915, 0.903]}      # 集落の位置(格子比 x, y)
+climate: {lat: 36.0, sea_level_temp_c: 15, precip_mm: 2000, wind_dir_deg: 270}
+steps:
+  - gen.noise: {kind: fbm, wavelength_m: 1100, octaves: 5, gain: 0.5, base_height: 400, warp: 0.4, offset: 700, power: 1.4}
+  - gen.noise: {kind: ridged, wavelength_m: 420, octaves: 5, gain: 0.45, base_height: 150, warp: 0.5}
+  - gen.tilt: {slope: [0.08, -0.12]}
+  - erosion.fluvial: {iterations: 30, k: 0.015}
+  - erosion.hydraulic: {iterations: 120, rain: 0.012, dissolve: 0.3, deposit: 0.3}
+  - gen.crags: {}
+  - erosion.thermal: {talus_deg: 42, iterations: 12}
+  - masks.slope: {}
+  - hydro.flow: {}
+  - hydro.rivers: {min_area_km2: 0.03}
+  - hydro.lakes: {min_depth: 3.0, min_area_m2: 8000}
+  - infra.road: {connect: [village_a, village_b], max_grade: 0.10, allow_tunnel: true, allow_bridge: true}
+  - masks.slope: {}
+  - hydro.flow: {}
+  - biome.jp_forest: {}
+  - geology.zones: {}
+  - scatter.trees: {r_m: 3.6, exclude: [road, river, lake, powerline]}
+  - scatter.shrubs: {r_m: 2.6}
+  - scatter.rocks: {cliff_deg: 54}
+  - scatter.ground: {}
+  - infra.furniture: {}
+export: {heightmap: png16, geotiff: true, usd: true, splat: true}
