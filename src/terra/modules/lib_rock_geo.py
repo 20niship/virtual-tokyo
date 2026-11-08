@@ -7,16 +7,18 @@ import numpy as np
 from vt import tree_gen as _tg
 from vt.materials import MATERIALS as _MAT
 
+from . import lib_rock_sdf as _sdf
 from .lib_rock import _ICO, _ico, _noise_dir
 from .registry import reg
 from .registry import tex as _tex
 
 KINDS = {   # shape: round(丸い)/angular(角)/slab(板状・層理)/karst(溶食)/soft(崩れやすい)、cuts=切り落とし面数、rough=歪み、flat=扁平率
     "granite": dict(ja="花崗岩", tex="rock_granite.png", tint="#b8b6b0", size=2.4, shape="round", cuts=5, rough=0.13, flat=0.78),
-    "andesite": dict(ja="安山岩/玄武岩", tex="rock_basalt.png", tint="#b0b0b4", size=3.0, shape="angular", cuts=10, rough=0.20, flat=0.72),
+    "andesite": dict(ja="安山岩/玄武岩", tex="rock_basalt.png", hi_gain=2.1, tint="#b0b0b4", size=3.0, shape="angular", cuts=10, rough=0.20, flat=0.72),
     "sandstone": dict(ja="砂岩/泥岩", tex="rock_sandstone.png", tint="#e6d8c0", size=2.0, shape="slab", cuts=8, rough=0.12, flat=0.5),
     "limestone": dict(ja="石灰岩", tex="rock_limestone.png", tint="#f0eee8", size=2.6, shape="karst", cuts=6, rough=0.22, flat=0.7),
     "tuff": dict(ja="凝灰岩", tex="rock_tuff.png", tint="#e0d8c0", size=2.4, shape="soft", cuts=4, rough=0.20, flat=0.75),
+    "seashore": dict(ja="海辺の岩(波食・穴だらけ)", tex="rock_granite.png", hi_gain=0.78, tint="#c8c6c0", size=2.4, shape="coastal", cuts=8, rough=0.18, flat=0.65),
     "river": dict(ja="川原の丸石", tex="rock_river.png", tint="#d0ccc4", size=1.0, shape="round", cuts=0, rough=0.06, flat=0.62),
 }
 STATES = [
@@ -24,12 +26,14 @@ STATES = [
     dict(name="weathered", ja="風化・地衣類", weathering=0.6, moss=0.1, lichen=0.55, chipped=0.1, grass=0, soil=0.2),
     dict(name="mossy", ja="苔むし・草", weathering=0.7, moss=0.9, lichen=0.15, chipped=0.0, grass=3, soil=0.6),
     dict(name="stained", ja="水染み・汚れ", weathering=0.5, moss=0.25, lichen=0.1, chipped=0.15, grass=1, soil=0.3),
+    dict(name="overgrown", ja="苔に厚く覆われた", weathering=0.45, moss=1.0, lichen=0.2, chipped=0.0, grass=2, soil=0.5),
 ]
 for _k, _s in KINDS.items():
     _MAT[f"rk_{_k}"] = _tex(_s["tex"], _s["size"], 0.92 if _k != "river" else 0.6, 0.8, tint=_s["tint"])
     _MAT[f"rk_{_k}_fresh"] = _tex(_s["tex"], _s["size"], 0.9, 0.7, tint="#ffffff")
     _MAT[f"rk_{_k}_lichen"] = _tex(_s["tex"], _s["size"], 0.95, 0.9, tint="#b9b27a")
     _MAT[f"rk_{_k}_stain"] = _tex(_s["tex"], _s["size"], 0.9, 0.8, tint="#6a625a")
+_sdf.register_materials(KINDS)
 _MAT["rk_moss"] = _tex("moss.png", 0.5, 0.98, 1.2, tint="#a8ac90")
 _MAT["rk_sediment"] = _tex("soil_humus.png", 0.8, 0.98, 0.6)
 
@@ -116,7 +120,7 @@ def hi_detail(P, nrm, rng, R, shape, sub):
     """hi(超高ポリ)の微細起伏: 岩種ごとの粗さの fBm を法線方向へ変位 + 割れ目の溝。最小波長は辺長の約 2.5 倍(これ以下はエイリアスになる)"""
     wl1 = max(R * 8 / 2 ** sub, 0.01)
     ridged = shape in ("angular", "slab", "karst")
-    amp = {"round": 0.035, "soft": 0.05, "angular": 0.06, "slab": 0.05, "karst": 0.07}[shape] * R
+    amp = {"round": 0.035, "soft": 0.05, "angular": 0.06, "slab": 0.05, "karst": 0.07, "coastal": 0.07}[shape] * R
     h = _fbm(P, rng, R * 0.7, wl1, ridged)
     P = P + nrm * ((h - h.mean()) * amp)[:, None]
     warp = _fbm(P, rng, R * 0.5, R * 0.1, False, 2)
@@ -206,6 +210,14 @@ def _rock_fn(kind, form, v, lod):
 
     def fn(m, W, H, rng):
         hi = lod == "hi"
+        if hi and kind != "river":                                                                 # 超高ポリ: SDF 彫刻(lib_rock_sdf)
+            sh = KINDS[kind]["shape"]
+            if form == "outcrop":
+                _sdf.build(m, kind, sh, st, rng, 1.8, "outcrop", None)
+            else:
+                R = {"s": 0.35, "m": 0.9, "l": 2.2}[form[-1]]
+                _sdf.build(m, kind, sh, st, rng, R, "boulder", (rng.uniform(0.85, 1.3), rng.uniform(0.85, 1.3), KINDS[kind]["flat"] * rng.uniform(0.9, 1.4)))
+            return
         m.smooth = hi or KINDS[kind]["shape"] in ("round", "soft", "karst")
         if form == "column":
             cf = column_bundle(m, 1.0, rng, kind, lod)
@@ -223,12 +235,15 @@ def _cliff_geo(kind, v, lod):
     st = STATES[v]
 
     def fn(m, W, H, rng):
+        if lod == "hi" and kind != "river":
+            _sdf.build_cliff(m, kind, KINDS[kind]["shape"], st, rng, W, H, v)
+            return
         nx, nz = {"near": (28, 18), "far": (10, 7), "hi": (180, 120)}[lod]
         shape = KINDS[kind]["shape"]
         m.smooth = lod == "hi"
         xs, zs = np.linspace(-W / 2, W / 2, nx + 1), np.linspace(0, H, nz + 1)
         n_ = _noise_dir(rng, 8)
-        lf, la = {"slab": (2.6, 0.5), "angular": (1.4, 0.25), "round": (0.9, 0.15), "karst": (1.8, 0.3), "soft": (1.2, 0.3)}[shape]
+        lf, la = {"slab": (2.6, 0.5), "angular": (1.4, 0.25), "round": (0.9, 0.15), "karst": (1.8, 0.3), "soft": (1.2, 0.3), "coastal": (2.0, 0.35)}[shape]
         P = np.zeros((nz + 1, nx + 1, 3))
         for j, z in enumerate(zs):
             ledge = la * math.sin(z * lf + v) + 0.3 * la * math.sin(z * 4.3)
@@ -237,12 +252,6 @@ def _cliff_geo(kind, v, lod):
                 d = d / (np.linalg.norm(d) + 1e-9)
                 joint = 0.5 * math.sin(x * 2.2 + 0.7 * v) if shape == "angular" else 0.0           # 縦の節理
                 P[j, k] = (x, 1.6 - (1.0 + 1.2 * n_(d) + ledge + joint + 0.5 * math.sin(x * 1.3 + z * 0.7)), z - 0.6)
-        if lod == "hi":                                                                         # 壁面の微細起伏(法線は -y 方向)
-            Q = P.reshape(-1, 3)
-            nrm = np.tile([0.0, -1.0, 0.0], (len(Q), 1))
-            Q = hi_detail(Q, nrm, rng, 3.0, shape, 6)
-            Q = Q.copy()
-            P = Q.reshape(P.shape)
         base = len(m.v)
         m.v.extend(map(tuple, P.reshape(-1, 3)))
         for j in range(nz):

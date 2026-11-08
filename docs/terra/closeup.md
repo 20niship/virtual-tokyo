@@ -63,8 +63,11 @@ near スポット(220m 角 = 4.84 ha)の散布密度(`make_near_doc` の出力 /
 
 ## 超高ポリ module(`_hi`、近影用)
 
-数 m 先の近影レンダ向け。near(転石 320 面)に対し、転石 2〜8 万面・露頭 8〜10 万面・崖 2.2 万面・土パッチ 1.7 万面(1.5cm 格子)。名前は `rock_<岩種>_<形>_<v>_hi` / `soil_<種>_patch_<v>_hi`。
-- 球(icosphere 5〜6 分割)を岩種の形に切り出した後、岩種ごとの粗さの fBm(角張る・層理・溶食は稜線型)を法線方向へ変位し、割れ目の溝を足す(`lib_rock_geo.hi_detail`)。苔・地衣類の斑も面が細かいので境界が細かくなる(#13 の緩和)。
-- スムーズシェーディング。土パッチは粒・小石の凹凸(`lib_soil`)。
-- 生成: `scripts/terra_modules_hi.py`(代表セットは `assets/terra/modules/*_hi.usdc` にコミット、`--all` で全て)。カタログ: `scripts/terra_modules_sheet.py hi [--only granite,andesite --cols 3]`。
-- 散布(`scatter_assets`)は従来どおり near/far のみ。`_hi` は近影で手置きする用途。
+数 m 先の近影レンダ向け。名前は `rock_<岩種>_<形>_<v>_hi`(岩種: 花崗岩・安山岩/玄武岩・砂岩・石灰岩・凝灰岩・**海辺の岩 seashore**(波食で穴だらけ)。川原の丸石は従来の高分割球)。状態 v=0..4(新鮮・風化・苔むし・水染み・**苔に厚く覆われた**)。
+転石 20〜35 万面、露頭 6〜20 万面、崖 10〜50 万面(near は転石 320 面)。
+
+- 生成器 `lib_rock_sdf`: SDF ボクセルを彫刻して marching cubes でメッシュ化(頂点変位では穴・えぐれ・鋭い稜線が作れないため)。乱数平面の多面体 → **欠け**(球状の範囲を傾けた平面で削る。半径 0.55 倍ずつ 5 段=フラクタル)→ **穴**(楕円体)→ **割れ目**(先細りの板)→ 層理・皺(ドメインワープした ridged fBm)・粒。孤立した破片は消す。
+- 材質: 岩種ごとに 14 変種(明度 5 段・暗色・新鮮面・錆び・地衣類 3・苔 2・濡れ)。面ごとに曲率(稜線は明るく・窪みは暗く)・向き・割れ目距離・新鮮面・ノイズから選ぶ。苔は上向き面と窪み・割れ目に溜まる。Bump はボクセル未満の皺・割れ目・穴・粒の高さ画像 `rockh_*.png`(`scripts/terra_textures_rockhi.py`)。
+- 生成: `scripts/terra_modules_hi.py`(代表セットは `assets/terra/modules/*_hi.usdc` にコミット、`--all` で全て。1 個 10〜40 秒)。カタログ: `scripts/terra_modules_sheet.py hi|hi_forms [--only granite,seashore --cols 3]`。
+- 散布(`scatter_assets`)は従来どおり near/far のみ。`_hi` は近影の手置き用。
+- 残課題: 地面(土・砂利)の `_hi` は粒・小石の凹凸のみで、パッチ形状も単純。皺は稜線の fBm で、粘土細工のような大きな褶曲までは出ていない。

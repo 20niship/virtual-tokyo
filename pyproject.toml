@@ -15,7 +15,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-terra = ["numba", "rasterio", "pyyaml", "pyproj", "scipy", "pillow"]
+terra = [
+    "numba",
+    "rasterio",
+    "pyyaml",
+    "pyproj",
+    "scipy",
+    "pillow",
+    "scikit-image>=0.26.0",
+]
 
 [dependency-groups]
 dev = ["pytest"]

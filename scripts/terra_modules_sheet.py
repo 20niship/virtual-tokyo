@@ -17,7 +17,7 @@ from terra.core.grid import Grid  # noqa: E402
 from vt import render as vr  # noqa: E402
 
 ap = argparse.ArgumentParser()
-ap.add_argument("sheet", choices=["rocks", "forms", "soils", "gravel", "far", "hi"])
+ap.add_argument("sheet", choices=["rocks", "forms", "soils", "gravel", "far", "hi", "hi_forms"])
 ap.add_argument("-o", "--out", default="out/terra/modules")
 ap.add_argument("--only", default="", help="カンマ区切りで行ラベルを絞る(近影用)")
 ap.add_argument("--cols", type=int, default=0, help="先頭から何列使うか")
@@ -25,7 +25,7 @@ ap.add_argument("--samples", type=int, default=32)
 ap.add_argument("--res", default="1800x1100")
 a = ap.parse_args()
 
-KS = ["granite", "andesite", "sandstone", "limestone", "tuff", "river"]
+KS = ["granite", "andesite", "sandstone", "limestone", "tuff", "river", "seashore"]
 SOILS = ["kuroboku", "redyellow", "clay", "sandy", "scoria", "masa", "humus", "mud"]
 GR = ["sand", "fine", "medium", "cobble", "river", "crushed", "talus", "ballast"]
 ST = ["fresh", "weathered", "mossy", "stained"]
@@ -41,10 +41,12 @@ elif a.sheet == "soils":
 elif a.sheet == "gravel":
     rows = [(k, [f"gravel_patch_{k}_0", f"gravel_patch_{k}_1"] + ([f"gravel_stone_{s}_{z}_0" for s, z in (("round", "fine"), ("angular", "medium"), ("round", "cobble"))] if i < 3 else []), ["patch0", "patch1", "round/fine", "angular/medium", "round/cobble"]) for i, k in enumerate(GR)]
     sp, sc = 4.4, 1.0
-elif a.sheet == "hi":   # 超高ポリ(_hi): 岩 4 形 × 5 岩種 + 地面パッチ
-    rows = [(k, [f"rock_{k}_boulder_m_{1 + i % 2}_hi", f"rock_{k}_boulder_l_{i % 4}_hi", f"rock_{k}_outcrop_{1 + i % 2}_hi", f"rock_{k}_cliff_{i % 4}_hi"], ["boulder m", "boulder l", "outcrop", "cliff"]) for i, k in enumerate(KS[:5])]
-    rows += [("soil", [f"soil_{k}_patch_0_hi" for k in ks], ks) for ks in (["kuroboku", "clay", "scoria", "masa"], ["sandy", "humus", "mud", "redyellow"])]
+elif a.sheet == "hi":   # 超高ポリ(_hi): 岩種 × 状態(新鮮・風化・苔・苔に覆われた)の転石 l
+    rows = [(k, [f"rock_{k}_boulder_l_{v}_hi" for v in (0, 1, 2, 4)], ["fresh", "weathered", "mossy", "overgrown"]) for k in ("granite", "andesite", "seashore", "limestone", "sandstone")]
     sp, sc = 8.0, 1.0
+elif a.sheet == "hi_forms":   # 形違い: 露頭・崖・中型の転石
+    rows = [(k, [f"rock_{k}_outcrop_2_hi", f"rock_{k}_boulder_m_1_hi", f"rock_{k}_cliff_2_hi"], ["outcrop", "boulder m", "cliff"]) for k in ("granite", "andesite", "seashore")]
+    sp, sc = 9.0, 1.0
 else:   # far: near と far のポリ数比較(同じ module)
     rows = [(k, [f"rock_{k}_boulder_m_1", f"rock_{k}_boulder_m_1_far", f"rock_{k}_outcrop_1", f"rock_{k}_outcrop_1_far"], ["near", "far", "outcrop near", "outcrop far"]) for k in KS[:5]]
     sp, sc = 6.0, 1.0

@@ -115,9 +115,12 @@ def test_clear_view_removes_trees_near_camera(tmp_path):
 
 
 def test_hi_modules_are_much_denser_and_valid():
-    for n in ("rock_granite_boulder_m_1", "rock_sandstone_outcrop_1", "rock_limestone_cliff_1", "soil_clay_patch_0"):
+    for n in ("rock_granite_boulder_s_1", "rock_seashore_outcrop_1", "rock_andesite_boulder_s_2"):
         near, hi = tm.build(n), tm.build(n + "_hi")
-        assert len(hi.f) > 10 * len(near.f) or len(hi.f) > 20000                      # near よりずっと高ポリ
+        assert len(hi.f) > 20 * len(near.f) and len(hi.f) > 20000                    # near よりずっと高ポリ
         assert np.isfinite(np.array(hi.v)).all() and set(hi.m) <= set(MATERIALS)
-    big = np.array(tm.build("rock_andesite_boulder_l_2_hi").v)
-    assert big[:, 2].ptp() > 1.0                                                      # 変位で潰れない(巨礫は高さ 1m 超)
+        assert len(set(hi.m)) >= 4                                                    # 色ムラ・窪み・稜線などで材質が分かれる
+    mossy, fresh = tm.build("rock_granite_boulder_s_4_hi"), tm.build("rock_granite_boulder_s_0_hi")
+    assert mossy.m.count("rkh_granite_moss") + mossy.m.count("rkh_granite_moss_dry") > 5 * (fresh.m.count("rkh_granite_moss") + 1)     # 苔に覆われた状態は苔が多い
+    big = np.array(tm.build("rock_andesite_boulder_s_1_hi").v)
+    assert np.ptp(big[:, 2]) > 0.15                                                   # 彫刻で潰れない
