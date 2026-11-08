@@ -11,7 +11,7 @@ import numpy as np
 ap = argparse.ArgumentParser()
 ap.add_argument("dir")
 ap.add_argument("-o", "--out", required=True)
-ap.add_argument("--mode", default="orbit", choices=["orbit", "fly"])
+ap.add_argument("--mode", default="orbit", choices=["orbit", "fly", "road"])
 ap.add_argument("--frames", type=int, default=96)
 ap.add_argument("--fps", type=int, default=16)
 ap.add_argument("--samples", type=int, default=12)
@@ -36,6 +36,7 @@ splat = R.splat_from_doc(doc)
 R.terrain_object(doc, splat=splat, stride=a.stride)
 R.add_far_plane(doc)
 R.add_water(doc)
+R.add_roads(doc)
 g = doc.grid
 cx, cy = g.x0 + g.nx * g.res / 2, g.y0 + g.ny * g.res / 2
 half = g.nx * g.res / 2
@@ -45,7 +46,17 @@ cam = vr.add_camera((cx, cy, 500), (cx, cy, 0), 40 if a.mode == "orbit" else 28)
 cam.data.clip_end = 60000
 if doc.scatter:
     from terra.export.scatter_assets import load_protos
-    print("instances:", R.add_scatter(doc, load_protos(doc), (cx, cy), half * 1.5 if a.mode == "orbit" else 200))
+    lodc = (cx, cy)
+    if a.mode == "road":                      # 道路沿いの動画は道路の中央付近を高ポリの中心に
+        allp = np.concatenate([np.asarray(ln.coords) for ln, _ in doc.vectors["roads"]])
+        lodc = tuple(allp.mean(0))
+    print("instances:", R.add_scatter(doc, load_protos(doc), lodc, half * 1.5 if a.mode == "orbit" else 700 if a.mode == "road" else 200))
+if a.mode == "road":                          # 道路(通常区間と橋)を順に辿る。トンネル区間は飛ばす(カットが入る)
+    pts = np.concatenate([np.c_[np.asarray(ln.coords), np.asarray(pr["z"])] for ln, pr in doc.vectors["roads"]])
+    dd = np.hypot(*np.diff(pts[:, :2], axis=0).T)
+    s = np.r_[0, np.cumsum(np.minimum(dd, 2.5))]
+    t = np.linspace(0, s[-1], a.frames + 12)
+    path = np.stack([np.interp(t, s, pts[:, i]) for i in range(3)], 1)
 if a.mode == "fly":
     lines = sorted(doc.vectors["rivers"], key=lambda t: -t[0].length)
     pts = np.concatenate([np.asarray(ln.coords) for ln, _ in lines[:1]])
@@ -63,6 +74,11 @@ def pose(f):
         d = half * 3.0
         x, y = cx + d * math.sin(ang), cy - d * math.cos(ang)
         return (x, y, zat(cx, cy) + d * 0.5 + 60), (cx, cy, zat(cx, cy) + 20)
+    if a.mode == "road":
+        p, q = path[f], path[min(f + 6, len(path) - 1)]
+        if np.hypot(*(q[:2] - p[:2])) > 60:           # トンネルで切れた所は直前の向きを保つ
+            q = p + (p - path[max(f - 1, 0)]) * 6
+        return (p[0], p[1], p[2] + 2.0 + 0.0), (q[0], q[1], q[2] + 1.8)
     p, q = path[f], path[min(f + 40, len(path) - 1)]
     return (p[0], p[1], zat(*p) + a.alt), (q[0], q[1], zat(*q) + a.alt * 0.5)
 

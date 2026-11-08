@@ -127,3 +127,15 @@ def test_road_modules_near_far():
         assert len(tm.build(n).f) >= len(tm.build(n + "_far").f) > 0
     assert len(tm.build("bridge_deck_8m").f) > len(tm.build("bridge_deck_8m_far").f)
     _ = (LineString, Furniture)
+
+
+def test_usd_export_has_roads_and_furniture(tmp_path):
+    from pxr import Usd, UsdGeom
+
+    from terra.export.usd import export_usd
+    a = run_recipe(RECIPE, seed=3, out=tmp_path, log=lambda s: None)
+    p = export_usd(a, tmp_path)[0]
+    st = Usd.Stage.Open(str(p))
+    assert st.GetPrimAtPath("/Terra/Roads").IsValid()
+    n = sum(len(UsdGeom.PointInstancer(pr).GetProtoIndicesAttr().Get()) for pr in st.Traverse() if pr.IsA(UsdGeom.PointInstancer))
+    assert n == sum(len(s["pos"]) for s in a.scatter.values()) and len(a.scatter["road_furniture"]["pos"]) > 0

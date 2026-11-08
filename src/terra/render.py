@@ -481,8 +481,8 @@ def road_poses(doc: Document):
                     best = (cut, (P[i], d, n, z[i]))
     if best[1] is not None:
         c, d, n, zr = best[1]
-        loc = c - d * 18 - n * 3.0
-        out["road_cut"] = ((loc[0], loc[1], zat(*loc) + 1.8), (c[0] + n[0] * 6, c[1] + n[1] * 6, zr + 3.0))
+        loc = c - d * 16                                        # 路面の上(道路の手前)から切土法面を見る
+        out["road_cut"] = ((loc[0], loc[1], zr + 1.8), (c[0] + n[0] * 7, c[1] + n[1] * 7, zr + 3.5))
     br = [(pr["length"], P, z) for P, z, pr in roads if pr["kind"] == "bridge"]
     if br:
         L, P, z = max(br, key=lambda t: t[0])
@@ -502,6 +502,11 @@ def road_poses(doc: Document):
         loc = P[0] - d * 28 + n * 8
         out["road_portal"] = ((loc[0], loc[1], zat(*loc) + 2.2), (P[0, 0], P[0, 1], pr["z"][0] + 2.5))
     if roads:
+        allp = np.concatenate([P for P, _, _ in roads])
+        c = (allp.min(0) + allp.max(0)) / 2
+        ext = float(np.ptp(allp, axis=0).max())
+        out["road_aerial"] = ((c[0] - ext * 0.5, c[1] - ext * 0.6, zat(*c) + ext * 0.45), (c[0], c[1], zat(*c) - 20))
+        out["road_aerial2"] = ((c[0] + ext * 0.6, c[1] - ext * 0.2, zat(*c) + ext * 0.4), (c[0], c[1], zat(*c) - 20))
         P, z, pr = max(roads, key=lambda t: len(t[0]) if t[2]["kind"] == "road" else 0)
         i = len(P) // 3
         d = P[min(i + 6, len(P) - 1)] - P[i]

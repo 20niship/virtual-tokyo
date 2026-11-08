@@ -15,7 +15,7 @@ steps:
   - hydro.flow: {}
   - hydro.rivers: {min_area_km2: 0.03}
   - hydro.lakes: {min_depth: 3.0, min_area_m2: 8000}
-  - infra.road: {connect: [village_a, village_b], max_grade: 0.10, allow_tunnel: true, allow_bridge: true}
+  - infra.road: {connect: [village_a, village_b], max_grade: 0.10, allow_tunnel: true, allow_bridge: true, bridge_cost: 16, tunnel_cost: 40}
   - masks.slope: {}
   - hydro.flow: {}
   - biome.jp_forest: {}

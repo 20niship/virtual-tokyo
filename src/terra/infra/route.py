@@ -132,7 +132,7 @@ def search(zc, slope, blocked, river, exist, zf, wf, rf, fs, cs, start, goal, gm
 
 
 def find_route(z, res, slope, water, river, start_xy, goal_xy, grid, gmax=0.10, factor=4, allow_tunnel=True, allow_bridge=True,
-               exist=None, min_cover=10.0, tunnel_cost=22.0, bridge_cost=10.0, max_clear=45.0, w_slope=3.0, w_grade=1.5, w_exist=-0.6, w_dz=0.02):
+               exist=None, min_cover=10.0, tunnel_cost=40.0, bridge_cost=16.0, max_clear=45.0, w_slope=3.0, w_grade=1.5, w_exist=-0.6, w_dz=0.02):
     """z: 細かい標高(行 0 = 南)。start/goal: ローカル座標[m]。返り値: [(x, y, kind_in, z)] 粗い格子の頂点(kind_in: その頂点へ入る手の種類、z: 探索に使った標高。隣り合う頂点間の勾配は上限以内)。gmax は縦断勾配の上限(0.10 = 10%)"""
     from scipy.ndimage import gaussian_filter, zoom
     f = factor

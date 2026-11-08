@@ -17,7 +17,7 @@ from terra.core.grid import Grid  # noqa: E402
 from vt import render as vr  # noqa: E402
 
 ap = argparse.ArgumentParser()
-ap.add_argument("sheet", choices=["rocks", "forms", "soils", "gravel", "far"])
+ap.add_argument("sheet", choices=["rocks", "forms", "soils", "gravel", "far", "road"])
 ap.add_argument("-o", "--out", default="out/terra/modules")
 ap.add_argument("--samples", type=int, default=32)
 ap.add_argument("--res", default="1800x1100")
@@ -39,6 +39,11 @@ elif a.sheet == "soils":
 elif a.sheet == "gravel":
     rows = [(k, [f"gravel_patch_{k}_0", f"gravel_patch_{k}_1"] + ([f"gravel_stone_{s}_{z}_0" for s, z in (("round", "fine"), ("angular", "medium"), ("round", "cobble"))] if i < 3 else []), ["patch0", "patch1", "round/fine", "angular/medium", "round/cobble"]) for i, k in enumerate(GR)]
     sp, sc = 4.4, 1.0
+elif a.sheet == "road":
+    rows = [("furniture", ["road_guardrail_4m", "road_retwall_4m", "road_rocknet_8m", "road_curve_mirror"], ["guardrail", "retaining wall", "rockfall net", "curve mirror"]),
+            ("portal", ["tunnel_portal_0", "tunnel_portal_1", "tunnel_portal_2", "tunnel_portal_2_far"], ["portal0", "portal1(canopy)", "portal2(wing)", "portal2 far"]),
+            ("bridge", ["bridge_deck_8m", "bridge_chinka_8m", "bridge_pier_8", "bridge_pier_24"], ["deck 8m", "chinka", "pier 8", "pier 24"])]
+    sp, sc = 14.0, 1.0
 else:   # far: near と far のポリ数比較(同じ module)
     rows = [(k, [f"rock_{k}_boulder_m_1", f"rock_{k}_boulder_m_1_far", f"rock_{k}_outcrop_1", f"rock_{k}_outcrop_1_far"], ["near", "far", "outcrop near", "outcrop far"]) for k in KS[:5]]
     sp, sc = 6.0, 1.0

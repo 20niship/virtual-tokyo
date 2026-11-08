@@ -117,7 +117,7 @@ class RoadNode(Node):
     outputs = ("height", "road", "cutfill")
     vec_outputs = ("roads", "tunnels", "portals", "road_stats")
     defaults = dict(connect=["village_a", "village_b"], max_grade=0.10, allow_tunnel=True, allow_bridge=True, width=6.5, clear_width=22.0,
-                    min_cover=10.0, tunnel_cost=22.0, bridge_cost=10.0, factor=4, cut_ratio=0.8, fill_ratio=1.5)
+                    min_cover=10.0, tunnel_cost=40.0, bridge_cost=16.0, factor=4, cut_ratio=0.8, fill_ratio=1.5)
 
     def run(self, doc, rng):
         import time

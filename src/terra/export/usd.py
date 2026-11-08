@@ -119,6 +119,20 @@ def write_scatter(st, doc, usd_path, root="/Terra/Scatter"):
     return total
 
 
+def write_roads(st, doc, usd_path, root="/Terra/Roads"):
+    """路面(アスファルト+白線)の曲面メッシュ。橋・トンネル・付属物は road_furniture の PointInstancer(module 参照)"""
+    from vt import usd_out as uo
+
+    from ..infra.roadmesh import road_mesh
+    m = road_mesh(doc)
+    if not m.f:
+        return 0
+    mats = uo.define_materials(st, "/Terra/Materials/Road", only=set(m.m), texdir=os.path.relpath(ROOT / "assets/textures", Path(usd_path).parent))
+    UsdGeom.Scope.Define(st, root)
+    uo._mesh_prims(st, root, m, mats)
+    return len(m.f)
+
+
 def ensure_modules(doc):
     from .. import modules as tm
     for s in doc.scatter.values():
@@ -140,8 +154,9 @@ def export_usd(doc, out, name="terra.usdc"):
     UsdGeom.Scope.Define(st, "/Terra/Materials")
     nt = write_terrain(st, doc)
     nw = write_water(st, doc)
+    nr = write_roads(st, doc, path)
     ni = write_scatter(st, doc, path)
-    root.GetPrim().SetCustomDataByKey("terra", dict(tiles=nt, water_quads=nw, instances=ni, res_m=doc.grid.res, crs=doc.grid.crs, x0=doc.grid.x0, y0=doc.grid.y0))
+    root.GetPrim().SetCustomDataByKey("terra", dict(tiles=nt, water_quads=nw, road_faces=nr, instances=ni, res_m=doc.grid.res, crs=doc.grid.crs, x0=doc.grid.x0, y0=doc.grid.y0))
     st.GetRootLayer().Save()
     return [path]
 
