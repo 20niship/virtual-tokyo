@@ -64,3 +64,13 @@
 - [x] scatter.rocks(地質で岩種・状態を選ぶ)・scatter.ground(土パッチ・砂利パッチ)
 - [x] tests/terra/test_closeup.py(8 件): 地質層、module の near/far・岩種・状態・土の違い、侵食の縞指標、crags は急斜面だけ、near ドキュメントのひび割れ無し・高密度・決定性、視線の廊下
 - 画像: `out/terra/closeup/{before,after,far,legacy}/`、前後比較 `out/terra/closeup/compare_*.jpg`、module のコンタクトシート `out/terra/modules/sheet_{rocks,forms,soils,gravel,far}.png`(いずれも gitignore。JPG は `out/terra/gallery/`)
+
+## T4 道路・橋・トンネル — 完了(設計の T4 範囲)
+詳細・統計・違和感リストは `docs/terra/infra.md`、既定値と出典は `docs/terra/infra_defaults.md`。
+- [x] infra/route.py(A*: 縦断勾配の上限つきの手+橋・トンネルの弦。Numba)、road.py(中心線・縦断線形・統計)、earthwork.py(切土盛土・法面・坑口の切り通し)、bridge.py(径間・橋脚・沈下橋)、tunnel.py(土被り)、furniture.py(付属物の配置)、roadmesh.py(路面メッシュ)
+- [x] 山間部の道路 module(`modules/lib_road.py`、near/far): ガードレール・擁壁・落石防止網・カーブミラー・坑口 3 種・橋桁・沈下橋・橋脚 7 段階
+- [x] 散布の除外に道路(伐採帯 22m)と坑口を反映。USD に路面メッシュと付属物を出力。terra_render に `--view road`(切土・橋・坑口・路面・俯瞰)、terra_video に `--mode road`
+- [x] tests/terra/test_t4.py(10 件): 縦断勾配の上限、川を橋で越える、尾根をトンネルで抜ける(土被り・坑口 2 つ・トンネル禁止で失敗)、路盤の高さと影響範囲外の不変、散布が除外領域に入らない、同一シードの再現性、USD
+- 検証(仮想 2km、2 集落間): 道路延長 1,947m、橋 7(609m)・トンネル 4(575m)、最大勾配 10%、切土 25,144m³・盛土 18,699m³、`infra.road` 0.7〜2.5 秒
+- 画像・動画: `out/terra/t4/img/`、前後比較 `out/terra/t4/cmp/compare_road_*.jpg`、動画 `out/terra/t4/road_fly.mp4`、module のコンタクトシート `out/terra/modules/sheet_road.png`
+- 残課題: ヘアピンの最小半径(約 3m。制約していない)、法尻の階段状、トンネル内部、道路沿いの集落・側溝の造形

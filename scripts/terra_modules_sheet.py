@@ -17,7 +17,7 @@ from terra.core.grid import Grid  # noqa: E402
 from vt import render as vr  # noqa: E402
 
 ap = argparse.ArgumentParser()
-ap.add_argument("sheet", choices=["rocks", "forms", "soils", "gravel", "far", "hi", "hi_forms"])
+ap.add_argument("sheet", choices=["rocks", "forms", "soils", "gravel", "far", "hi", "hi_forms", "road"])
 ap.add_argument("-o", "--out", default="out/terra/modules")
 ap.add_argument("--only", default="", help="カンマ区切りで行ラベルを絞る(近影用)")
 ap.add_argument("--cols", type=int, default=0, help="先頭から何列使うか")
@@ -47,6 +47,11 @@ elif a.sheet == "hi":   # 超高ポリ(_hi): 岩種 × 状態(新鮮・風化・
 elif a.sheet == "hi_forms":   # 形違い: 露頭・崖・中型の転石
     rows = [(k, [f"rock_{k}_outcrop_2_hi", f"rock_{k}_boulder_m_1_hi", f"rock_{k}_cliff_2_hi"], ["outcrop", "boulder m", "cliff"]) for k in ("granite", "andesite", "seashore")]
     sp, sc = 9.0, 1.0
+elif a.sheet == "road":
+    rows = [("furniture", ["road_guardrail_4m", "road_retwall_4m", "road_rocknet_8m", "road_curve_mirror"], ["guardrail", "retaining wall", "rockfall net", "curve mirror"]),
+            ("portal", ["tunnel_portal_0", "tunnel_portal_1", "tunnel_portal_2", "tunnel_portal_2_far"], ["portal0", "portal1(canopy)", "portal2(wing)", "portal2 far"]),
+            ("bridge", ["bridge_deck_8m", "bridge_chinka_8m", "bridge_pier_8", "bridge_pier_24"], ["deck 8m", "chinka", "pier 8", "pier 24"])]
+    sp, sc = 14.0, 1.0
 else:   # far: near と far のポリ数比較(同じ module)
     rows = [(k, [f"rock_{k}_boulder_m_1", f"rock_{k}_boulder_m_1_far", f"rock_{k}_outcrop_1", f"rock_{k}_outcrop_1_far"], ["near", "far", "outcrop near", "outcrop far"]) for k in KS[:5]]
     sp, sc = 6.0, 1.0

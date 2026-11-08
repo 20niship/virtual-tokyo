@@ -45,6 +45,19 @@ def render_top(doc, overlays=(), box=None, scale=1, exag=1.0):
         i1, j1 = int((box[2] - g.x0) / g.res), int((box[3] - g.y0) / g.res)
         img = img[max(j0, 0):j1, max(i0, 0):i1]
     im = Image.fromarray(np.flipud(img))
+    if "roads" in overlays:
+        from PIL import ImageDraw
+        dr = ImageDraw.Draw(im)
+        g = doc.grid
+        col = dict(road=(255, 240, 0), bridge=(255, 60, 60), tunnel=(255, 0, 255))
+        for ln, pr in list(doc.vectors.get("roads", [])) + list(doc.vectors.get("tunnels", [])):
+            pts = [((x - g.x0) / g.res, g.ny - (y - g.y0) / g.res) for x, y in ln.coords]
+            dr.line(pts, fill=col[pr["kind"]], width=3)
+        for pt_, pr in doc.vectors.get("portals", []):
+            x, y = pt_.x, pt_.y
+            dr.ellipse([(x - g.x0) / g.res - 5, g.ny - (y - g.y0) / g.res - 5, (x - g.x0) / g.res + 5, g.ny - (y - g.y0) / g.res + 5], outline=(255, 255, 255), width=2)
+    if scale != 1:
+        pass
     if scale != 1:
         im = im.resize((im.width * scale, im.height * scale), Image.BILINEAR)
     return im

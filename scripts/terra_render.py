@@ -6,7 +6,7 @@ from pathlib import Path
 
 ap = argparse.ArgumentParser()
 ap.add_argument("dir")
-ap.add_argument("--view", nargs="+", default=["oblique"], choices=["oblique", "ground", "all", "near"])
+ap.add_argument("--view", nargs="+", default=["oblique"], choices=["oblique", "ground", "all", "near", "road"])
 ap.add_argument("-o", "--out", default=None)
 ap.add_argument("--name", default=None)
 ap.add_argument("--look", default="photoreal", choices=["photoreal", "legacy"])
@@ -27,6 +27,7 @@ ap.add_argument("--no-splat", action="store_true", help="biome があっても�
 ap.add_argument("--hi-dist", type=float, default=150.0, help="樹木を高ポリにする距離[m]")
 ap.add_argument("--time", default="day")
 ap.add_argument("--pose", default="", help="カメラ直指定 'x,y,z,tx,ty,tz'")
+ap.add_argument("--only", default="", help="near/road 視点のうち描くものの名前(カンマ区切り。例: road_cut,road_aerial)")
 ap.add_argument("--stats", default="", help="ポリゴン数・インスタンス数・時間を JSON で追記するファイル")
 a = ap.parse_args()
 
@@ -49,8 +50,12 @@ out = Path(a.out or a.dir)
 name = a.name or Path(a.dir).name
 views = ["oblique", "ground"] if "all" in a.view else a.view
 poses_far = R.near_poses(doc) if "near" in views else {}
-if "near" in views:
-    views = [v for v in views if v != "near"] + ["near_" + k for k in poses_far]
+if "road" in views:
+    poses_far.update(R.road_poses(doc))
+if a.only:
+    poses_far = {k: v for k, v in poses_far.items() if k in a.only.split(",")}
+if "near" in views or "road" in views:
+    views = [v for v in views if v not in ("near", "road")] + ["near_" + k for k in poses_far]
 
 
 def faces_of(objs):
@@ -100,6 +105,7 @@ for v in views:
             nrm = R.bake_normal_image(big)
         terr.append(R.terrain_object(doc, box=box, stride=stride, splat=splat, normal_image=nrm))
         R.add_far_plane(doc)
+    R.add_roads(doc)
     if not a.no_water:
         R.add_water(doc)
         if near is not None:
@@ -116,7 +122,7 @@ for v in views:
             bx = near.meta["near_box"]
             far_doc = Document(doc.grid, doc.seed)
             for k, s in doc.scatter.items():
-                m = ~((s["pos"][:, 0] > bx[0]) & (s["pos"][:, 0] < bx[2]) & (s["pos"][:, 1] > bx[1]) & (s["pos"][:, 1] < bx[3]))
+                m = np.ones(len(s["pos"]), bool) if k == "road_furniture" else ~((s["pos"][:, 0] > bx[0]) & (s["pos"][:, 0] < bx[2]) & (s["pos"][:, 1] > bx[1]) & (s["pos"][:, 1] < bx[3]))
                 far_doc.scatter[k] = {f: (val[m] if f != "assets" else val) for f, val in s.items()}
         if a.detail == "far":                                          # 遠景用: 低木・草・地面パッチを省き、木は 2 割間引く
             rs = np.random.default_rng(1)
