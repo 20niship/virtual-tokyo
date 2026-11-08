@@ -42,7 +42,7 @@ def _padded(doc, colors, splat, frac):
     return d2, colors, splat
 
 
-def terrain_object(doc: Document, name="terrain", box=None, stride=1, colors=None, splat=None, pad=0.35):
+def terrain_object(doc: Document, name="terrain", box=None, stride=1, colors=None, splat=None, pad=0.35, normal_image=None, ij=None):
     """box=(x0,y0,x1,y1) ローカル座標でクリップ。colors: (ny,nx,4) 頂点色。splat: dict(w0=(ny,nx,4), w1=(ny,nx,4))。pad>0 は box なし時の外周延長"""
     import bpy
     if pad and not box:
@@ -50,7 +50,9 @@ def terrain_object(doc: Document, name="terrain", box=None, stride=1, colors=Non
     g = doc.grid
     X, Y = g.xy()
     sl = (slice(0, g.ny, stride), slice(0, g.nx, stride))
-    if box:
+    if ij is not None:
+        sl = (slice(ij[2], ij[3], stride), slice(ij[0], ij[1], stride))
+    elif box:
         i0, j0 = max(int((box[0] - g.x0) / g.res), 0), max(int((box[1] - g.y0) / g.res), 0)
         i1, j1 = min(int((box[2] - g.x0) / g.res), g.nx), min(int((box[3] - g.y0) / g.res), g.ny)
         sl = (slice(j0, j1, stride), slice(i0, i1, stride))
@@ -71,7 +73,7 @@ def terrain_object(doc: Document, name="terrain", box=None, stride=1, colors=Non
     me.polygons.foreach_set("use_smooth", np.ones(len(quads), bool))
     me.update(calc_edges=True)
     uv = me.uv_layers.new(name="UVMap")
-    uv.data.foreach_set("uv", np.stack([x, y], -1).reshape(-1, 2)[quads.ravel()].astype(np.float32).ravel())
+    uv.data.foreach_set("uv", np.stack([(x - g.x0) / (g.nx * g.res), (y - g.y0) / (g.ny * g.res)], -1).reshape(-1, 2)[quads.ravel()].astype(np.float32).ravel())
 
     def attr(nm, arr):
         a = me.color_attributes.new(nm, "FLOAT_COLOR", "POINT")
@@ -79,7 +81,10 @@ def terrain_object(doc: Document, name="terrain", box=None, stride=1, colors=Non
     if splat:
         attr("w0", splat["w0"])
         attr("w1", splat["w1"])
-        mat = terrain_material_splat()
+        attr("t0", splat["t0"])
+        attr("t1", splat["t1"])
+        from . import terrain_material
+        mat = terrain_material.build(normal_image)
     else:
         attr("col", colors if colors is not None else default_colors(doc))
         mat = terrain_material_vcol()
@@ -113,80 +118,42 @@ def _tex_paths():
             "scree": root / "textures/gravel.png", "soil": root / "textures/soil.png", "alpine": root / "terra/textures/alpine_turf.png"}
 
 
-def terrain_material_splat():
-    """スプラット材質: 6 層(w0/w1 の頂点属性が重み)を、約4m/11mの 2 サンプル(回転・スケール違い)+ボックス投影で混ぜる(タイル繰り返しを目立たなくする)。"""
-    import bpy
-    m = bpy.data.materials.new("terrain_splat")
-    m.use_nodes = True
-    nt = m.node_tree
-    nt.nodes.clear()
-    N, L = nt.nodes.new, nt.links.new
-    out, bs = N("ShaderNodeOutputMaterial"), N("ShaderNodeBsdfPrincipled")
-    L(bs.outputs[0], out.inputs[0])
-    tc = N("ShaderNodeTexCoord")
-    paths = _tex_paths()
-
-    def sample(layer, scale, rot):
-        mp = N("ShaderNodeMapping")
-        mp.inputs["Scale"].default_value = (1 / scale,) * 3
-        mp.inputs["Rotation"].default_value = (0, 0, math.radians(rot))
-        L(tc.outputs["Object"], mp.inputs["Vector"])
-        im = N("ShaderNodeTexImage")
-        im.image = bpy.data.images.load(str(paths[layer]))
-        im.projection = "BOX"
-        im.projection_blend = 0.25
-        L(mp.outputs[0], im.inputs["Vector"])
-        return im.outputs["Color"]
-
-    def mix(a, b, f):
-        n = N("ShaderNodeMix")
-        n.data_type = "RGBA"
-        n.inputs[0].default_value = f
-        L(a, n.inputs[6])
-        L(b, n.inputs[7])
-        return n.outputs[2]
-    cols = {}
-    for k in SPLAT:
-        cols[k] = mix(sample(k, 4.0, 0), sample(k, 11.0, 37), 0.5)
-    w0, w1 = N("ShaderNodeAttribute"), N("ShaderNodeAttribute")
-    w0.attribute_name, w1.attribute_name = "w0", "w1"
-    s0, s1 = N("ShaderNodeSeparateColor"), N("ShaderNodeSeparateColor")
-    L(w0.outputs["Color"], s0.inputs[0])
-    L(w1.outputs["Color"], s1.inputs[0])
-    wts = list(s0.outputs[:3]) + list(s1.outputs[:3])
-    acc = None
-    for k, w in zip(SPLAT, wts):
-        mul = N("ShaderNodeMix")
-        mul.data_type = "RGBA"
-        mul.blend_type = "MULTIPLY"
-        mul.inputs[0].default_value = 1.0
-        L(cols[k], mul.inputs[6])
-        wc = N("ShaderNodeCombineColor")
-        for i in range(3):
-            L(w, wc.inputs[i])
-        L(wc.outputs[0], mul.inputs[7])
-        if acc is None:
-            acc = mul.outputs[2]
-        else:
-            add = N("ShaderNodeMix")
-            add.data_type = "RGBA"
-            add.blend_type = "ADD"
-            add.inputs[0].default_value = 1.0
-            L(acc, add.inputs[6])
-            L(mul.outputs[2], add.inputs[7])
-            acc = add.outputs[2]
-    L(acc, bs.inputs["Base Color"])
-    bs.inputs["Roughness"].default_value = 0.93
-    return m
-
-
 def splat_from_doc(doc):
-    """splat_* 層(6 枚)→ 頂点属性 w0=(grass,litter,rock) w1=(scree,soil,alpine)。無ければ None"""
+    """splat_* 層 → 頂点属性 w0=(grass,litter,rock) w1=(scree,soil,alpine) と、地質による色 t0=(土の反射率, 苔) t1=(岩の色味, 地衣類)。splat が無ければ None"""
     if "splat_grass" not in doc.layers:
         return None
+    from .geology.tables import ROCK_TINT, SOIL_ALBEDO
     L = [doc.layers["splat_" + n] for n in SPLAT]
     one = np.ones_like(L[0])
-    return dict(w0=np.stack(L[:3] + [one], -1), w1=np.stack(L[3:] + [one], -1))
+    zero = np.zeros_like(L[0])
+    sd = doc.layers.get("soil_type")
+    geo = doc.layers.get("geology")
+    soil = SOIL_ALBEDO[sd] if sd is not None else np.broadcast_to(np.array([0.3, 0.22, 0.14], np.float32), L[0].shape + (3,))
+    rock = ROCK_TINT[geo] if geo is not None else np.ones(L[0].shape + (3,), np.float32)
+    return dict(w0=np.stack(L[:3] + [one], -1), w1=np.stack(L[3:] + [one], -1),
+                t0=np.concatenate([soil, doc.layers.get("moss", zero)[..., None]], -1), t1=np.concatenate([rock, doc.layers.get("lichen", zero)[..., None]], -1))
+
+
+def _desaturate(obj, sat=0.7, val=0.9):
+    """オブジェクトの材質を複製し、Base Color の手前に Hue/Saturation を挟む(草の彩度を下げる。他の木と材質を共有しないよう複製)"""
+    import bpy
+    for i, m in enumerate(obj.data.materials):
+        if m is None or not m.use_nodes:
+            continue
+        m2 = m.copy()
+        nt = m2.node_tree
+        for bs in [n for n in nt.nodes if n.type == "BSDF_PRINCIPLED"]:
+            inp = bs.inputs["Base Color"]
+            hs = nt.nodes.new("ShaderNodeHueSaturation")
+            hs.inputs["Saturation"].default_value = sat
+            hs.inputs["Value"].default_value = val
+            if inp.links:
+                src = inp.links[0].from_socket
+                nt.links.new(src, hs.inputs["Color"])
+            else:
+                hs.inputs["Color"].default_value = inp.default_value
+            nt.links.new(hs.outputs["Color"], inp)
+        obj.data.materials[i] = m2
 
 
 def add_scatter(doc: Document, protos: dict, cam=None, hi_dist=150.0):
@@ -211,6 +178,8 @@ def add_scatter(doc: Document, protos: dict, cam=None, hi_dist=150.0):
                 src = bpy.data.objects.new(f"{sk}_{key}_src", render.mesh_to_bpy(key, protos[key]))
                 col.objects.link(src)
                 src.hide_render = src.hide_viewport = True
+                if sk == "shrubs" and "grass" in an:
+                    _desaturate(src)
                 pts = bpy.data.meshes.new(f"{sk}_{key}_pts")
                 n = int(sel.sum())
                 pts.vertices.add(n)
@@ -373,7 +342,7 @@ def add_far_plane(doc, z=None):
     bpy.context.scene.collection.objects.link(o)
 
 
-def estimate_ev(target=0.2):
+def estimate_ev(target=0.2, pct=50):
     """低解像度の試し撮り(EV-4 で飽和を避ける)の下半分(地面)の線形輝度の中央値から露出[EV]を決める。地形は日向が明るく vt の自動露出だと飽和する"""
     import tempfile
     import bpy
@@ -390,20 +359,90 @@ def estimate_ev(target=0.2):
     os.remove(tmp)
     (sc.render.resolution_percentage, sc.cycles.samples, sc.cycles.use_denoising, sc.view_settings.view_transform, sc.view_settings.look, sc.view_settings.exposure) = save
     lin = np.where(a <= 0.04045, a / 12.92, ((a + 0.055) / 1.055) ** 2.4) @ np.array([0.2126, 0.7152, 0.0722], np.float32)
-    m = float(np.median(lin[lin.shape[0] // 2:])) * 16.0
-    return float(np.clip(math.log2(target / max(m, 1e-4)), -8.0, 2.0))
+    m = float(np.percentile(lin[lin.shape[0] // 2:], pct)) * 16.0
+    return float(np.clip(math.log2(target / max(m, 1e-4)), -8.0, 3.0))
 
 
-def finish(path, ev_target=0.2):
+def finish(path, ev_target=0.2, pct=50):
     """露出自動決定→描画→写実ポスト(ビネット・粒子)"""
     import bpy
     from vt import render
     vs = bpy.context.scene.view_settings
     vs.look = "AgX - Base Contrast"
-    vs.exposure = estimate_ev(ev_target)
+    vs.exposure = estimate_ev(ev_target, pct)
     render.set_glare_threshold(vs.exposure)
     os.makedirs(os.path.dirname(str(path)) or ".", exist_ok=True)
     render.render(path)
     if render.PHOTO:
         render.postprocess(path)
     return vs.exposure
+
+
+def near_poses(doc: Document, seed=3):
+    """近接レンダ用の 3 視点を地形から自動で選ぶ。slope: 急な裸地を斜め下から / forest: 林内の目線 / river: 川の脇。返り値 {名前: (loc, target)}"""
+    g = doc.grid
+    X, Y = g.xy()
+    sl, hf = doc.layers["slope"], doc.heightfield()
+    rng = np.random.default_rng(seed)
+    m = 60.0 / g.res
+    inner = np.zeros(g.shape, bool)
+    inner[int(m):-int(m), int(m):-int(m)] = True
+    zat = lambda x, y: float(hf.sample(np.array([x]), np.array([y]))[0])
+    out = {}
+    cand = np.flatnonzero((sl > 38) & (sl < 55) & inner & (doc.layers.get("splat_rock", sl * 0 + 1) > 0.25).ravel().reshape(g.shape))
+    if len(cand):
+        c = int(rng.choice(cand))
+        cx, cy = X.ravel()[c], Y.ravel()[c]
+        a = np.radians(doc.layers["aspect"].ravel()[c])
+        d = np.array([np.sin(a), np.cos(a)])          # 下り方向
+        loc = (cx + d[0] * 11, cy + d[1] * 11)
+        out["slope"] = ((loc[0], loc[1], zat(*loc) + 2.0), (cx, cy, zat(cx, cy) + 1.5))
+    can = doc.layers.get("canopy", sl * 0)
+    cand = np.flatnonzero((can > 0.7) & (sl > 12) & (sl < 28) & inner)
+    if len(cand):
+        c = int(rng.choice(cand))
+        cx, cy = X.ravel()[c], Y.ravel()[c]
+        ang = rng.uniform(0, 6.28)
+        tgt = (cx + 25 * np.cos(ang), cy + 25 * np.sin(ang))
+        out["forest"] = ((cx, cy, zat(cx, cy) + 1.7), (tgt[0], tgt[1], zat(*tgt) + 3.0))
+    cand = np.flatnonzero((sl > 6) & (sl < 30) & inner)
+    if len(cand):
+        cv = can.ravel()[cand]
+        cand = cand[cv <= np.percentile(cv, 20)]            # 林冠の薄い所(地面がよく見える)
+        c = int(rng.choice(cand))
+        cx, cy = X.ravel()[c], Y.ravel()[c]
+        tgt = (cx + 4.0, cy + 3.0)
+        out["ground"] = ((cx, cy, zat(cx, cy) + 1.5), (tgt[0], tgt[1], zat(*tgt) + 0.2))
+    rv = doc.layers.get("river", sl * 0)
+    cand = np.flatnonzero((rv > 0) & (sl < 32) & inner)
+    if len(cand):
+        c = int(rng.choice(cand))
+        cx, cy = X.ravel()[c], Y.ravel()[c]
+        loc = (cx - 18, cy - 14)
+        out["river"] = ((loc[0], loc[1], zat(*loc) + 2.0), (cx, cy, zat(cx, cy) + 1.0))
+    return out
+
+
+def terrain_parts(doc: Document, hole, stride=2, splat=None, pad=0.35):
+    """near スポット(hole=(x0,y0,x1,y1), 粗い格子の頂点に合わせてある)を空けた far 地形を 4 枚の板で作る。縁の頂点は共有されひび割れない"""
+    big, _, splat = _padded(doc, None, splat, pad)
+    g = big.grid
+    ih0, ih1 = int(round((hole[0] - g.x0) / g.res - 0.5)), int(round((hole[2] - g.x0) / g.res - 0.5))
+    jh0, jh1 = int(round((hole[1] - g.y0) / g.res - 0.5)), int(round((hole[3] - g.y0) / g.res - 0.5))
+    parts = [(0, ih0 + 1, 0, g.ny), (ih1, g.nx, 0, g.ny), (ih0, ih1 + 1, 0, jh0 + 1), (ih0, ih1 + 1, jh1, g.ny)]
+    return [terrain_object(big, f"terrain_far{k}", stride=stride, splat=splat, pad=0, ij=p) for k, p in enumerate(parts)], big
+
+
+def bake_normal_image(doc: Document, name="terrain_nrm"):
+    """全解像度の高さから object-space の法線マップ(far 用の「法線ベイク」)。画像の (u,v) は格子全体の 0..1(行 0 = 南 = v 0)"""
+    import bpy
+    g = doc.grid
+    gy, gx = np.gradient(doc.height.astype(np.float64), g.res)
+    n = np.stack([-gx, -gy, np.ones_like(gx)], -1)
+    n /= np.linalg.norm(n, axis=-1, keepdims=True)
+    px = np.concatenate([n * 0.5 + 0.5, np.ones(g.shape + (1,))], -1).astype(np.float32)
+    im = bpy.data.images.new(name, g.nx, g.ny, alpha=False, float_buffer=False)
+    im.colorspace_settings.name = "Non-Color"
+    im.pixels.foreach_set(px.ravel())
+    im.pack()
+    return im

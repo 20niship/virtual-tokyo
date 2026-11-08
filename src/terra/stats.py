@@ -37,3 +37,17 @@ def terrain_stats(z, res, grid, min_area_km2=0.03):
         drainage_km_per_km2=float(sum(ln.length for ln, _ in lines) / 1000 / km2),
         n_reaches=len(lines), max_order=max((p["order"] for _, p in lines), default=0),
         max_basin_km2=float(area[rcv < 0].max() / 1e6), psd_slope=psd_slope(z.astype(np.float64), res))
+
+
+def axis_streak_index(z, band=(0.25, 0.5)):
+    """格子軸方向の縞の強さ: 高域(Nyquist の band 倍)のスペクトルのうち、kx/ky 軸の ±10 度に入るエネルギーの割合。等方なら約 0.22、軸方向の縞があるほど大きい"""
+    z = np.asarray(z, np.float64)
+    w = np.hanning(z.shape[0])[:, None] * np.hanning(z.shape[1])[None, :]
+    f = np.abs(np.fft.fftshift(np.fft.fft2((z - z.mean()) * w))) ** 2
+    ky, kx = np.indices(f.shape)
+    ky, kx = ky - f.shape[0] / 2, kx - f.shape[1] / 2
+    r = np.hypot(ky, kx) / (min(f.shape) / 2)
+    ang = np.degrees(np.arctan2(np.abs(ky), np.abs(kx)))
+    sel = (r > band[0]) & (r < band[1])
+    axis = sel & ((ang < 10) | (ang > 80))
+    return float(f[axis].sum() / max(f[sel].sum(), 1e-12))

@@ -248,6 +248,13 @@ steps:
 export: {usd: true, splat: true}
 ```
 
+### Terra の詳細度プロファイル(near / far)と地質 module
+
+- `--detail far`(既定): 全域を低ポリ(4m 間引き+全解像度の高さから焼いた法線マップ)で描き、散布を間引き、大気遠近(霞・青み)を強める。`--detail near --view near`: 視点周辺 約 220m 角を 0.5m 格子へ細分化し、微細な起伏(岩の角・層理・礫・土のこぶ)と高密度の散布を足す。`--detail legacy` は従来表示。
+- `geology.zones` が岩種(花崗岩/安山岩/砂岩/石灰岩/凝灰岩)・土種(黒ボク/赤黄色土/粘土/砂質土/スコリア/マサ土/腐植/ぬかるみ)・苔/地衣類の付きやすさを作り、スプラット材質の土色・岩色と `scatter.rocks` / `scatter.ground` の module 選択に使う。
+- 岩・土・砂利の module(`src/terra/modules/lib_rock_geo.py`, `lib_soil.py`, `lib_gravel.py`)は 約 450 個(各 near / `_far`)。一覧とポリ数は `docs/terra/modules_geo.md`、近接の違和感と対応は `docs/terra/closeup.md`。
+  `uv run python scripts/terra_modules_build.py`(usdc 書き出し+一覧更新)、`scripts/terra_modules_sheet.py rocks|forms|soils|gravel|far`(コンタクトシート)、`scripts/terra_profiles.sh`(3 プロファイルのレンダと統計)。
+
 ## データの出典・ライセンス
 
 - 地図データ: © OpenStreetMap contributors(ODbL)。このリポジトリの生成物のうちOSM由来の形状は、ODbLの帰属表示が必要。

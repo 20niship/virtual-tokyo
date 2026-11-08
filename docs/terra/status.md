@@ -54,3 +54,13 @@
   - tests/terra/test_t3.py: ポアソン最小間隔・決定性、植生帯が標高順で気候により上下、散布が川・湖に入らず接地、岩 module と USD(PointInstancer 総数=散布数)
 - 画像: `out/terra/t3/{v2k_top,v2k_biome,v2k_oblique,v2k_ground}.png`、動画 `out/terra/t3/v2k_fly.mp4`(川沿いフライスルー)。JPG は `out/terra/gallery/t3_*.jpg`
 - 既知の課題: 急斜面の裸地は材質が単調(岩テクスチャの強調が必要)。崖パネルは斜面に半分埋め込む配置だが数を絞っている。水力侵食の格子軸方向の筋。針葉樹の葉は広葉の葉アトラスを流用(針葉カードが無い)
+
+## T3 追補: 近接品質の改善と地質 module — 完了
+詳細は `docs/terra/closeup.md`(違和感リストと対応・プロファイル別の統計)と `docs/terra/modules_geo.md`(module 一覧・ポリ数)。
+- [x] 近接レンダの違和感を列挙(14 項目)し修正: 地質別の土色・岩色・苔/地衣類、層理と岩の角(`gen.crags`)、水力侵食の格子軸の縞の除去、近接の微細起伏、草・低木の密度とスケール・草の彩度、遠景の大気遠近、地形メッシュの細分化と法線ベイク、露出推定、崖パネル、ガレ場・河原の礫
+- [x] 詳細度プロファイル `--detail near|far|legacy`(scripts/terra_render.py): far = 4m 間引き+法線ベイク+散布を間引き+強い霞 / near = 視点周辺 220m 角を 0.5m 格子へ細分化+微細起伏+高密度散布(`terra/detail.py`)
+- [x] `geology.zones`: 岩種 5・土種 8・moss/lichen。スプラット材質の土色・岩色が地質で変わる
+- [x] 岩・土・砂利の module 約 450 個(各 near / far): `lib_rock_geo.py`(岩種 6 × 形 × 状態 4)、`lib_soil.py`(土種 8 のパッチ・土塊)、`lib_gravel.py`(砂利パッチ 8・単体礫 36)。手続き生成テクスチャ(`scripts/terra_textures_geo.py`、計 3MB の小さな PNG)
+- [x] scatter.rocks(地質で岩種・状態を選ぶ)・scatter.ground(土パッチ・砂利パッチ)
+- [x] tests/terra/test_closeup.py(8 件): 地質層、module の near/far・岩種・状態・土の違い、侵食の縞指標、crags は急斜面だけ、near ドキュメントのひび割れ無し・高密度・決定性、視線の廊下
+- 画像: `out/terra/closeup/{before,after,far,legacy}/`、前後比較 `out/terra/closeup/compare_*.jpg`、module のコンタクトシート `out/terra/modules/sheet_{rocks,forms,soils,gravel,far}.png`(いずれも gitignore。JPG は `out/terra/gallery/`)

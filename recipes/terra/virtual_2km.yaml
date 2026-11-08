@@ -8,13 +8,16 @@ steps:
   - gen.tilt: {slope: [0.08, -0.12]}
   - erosion.fluvial: {iterations: 30, k: 0.015}
   - erosion.hydraulic: {iterations: 120, rain: 0.012, dissolve: 0.3, deposit: 0.3}
-  - erosion.thermal: {talus_deg: 40, iterations: 30}
+  - gen.crags: {}
+  - erosion.thermal: {talus_deg: 42, iterations: 12}
   - masks.slope: {}
   - hydro.flow: {}
   - hydro.rivers: {min_area_km2: 0.03}
   - hydro.lakes: {min_depth: 3.0, min_area_m2: 8000}
   - biome.jp_forest: {}
+  - geology.zones: {}
   - scatter.trees: {r_m: 3.6, exclude: [road, river, lake, powerline]}
   - scatter.shrubs: {r_m: 2.6}
   - scatter.rocks: {cliff_deg: 54}
+  - scatter.ground: {}
 export: {heightmap: png16, geotiff: true, usd: true, splat: true}
