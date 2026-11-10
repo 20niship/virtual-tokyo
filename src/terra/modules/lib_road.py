@@ -11,8 +11,8 @@ _MAT["road_post_orange"] = dict(color="#d6782a", rough=0.5, metal=0.0)
 _MAT["road_net"] = dict(color="#6c7072", rough=0.6, metal=0.8)
 _MAT["tunnel_dark"] = dict(color="#050505", rough=1.0, metal=0.0)
 _MAT["road_concrete_old"] = dict(color="#8d8b84", rough=0.92, metal=0.0, tex="concrete.png", size=3.0, bump=0.5)
-_MAT["tunnel_lamp"] = dict(color="#fff0d0", rough=0.5, metal=0.0, emit=("#ffe6b8", 40.0))
-_MAT["tunnel_wall"] = dict(color="#b9b6ac", rough=0.8, metal=0.0, tex="concrete.png", size=3.0, bump=0.3)
+_MAT["tunnel_lamp"] = dict(color="#fff0d0", rough=0.5, metal=0.0, emit=("#ffe6b8", 400.0))
+_MAT["tunnel_wall"] = dict(color="#b9b6ac", rough=0.8, metal=0.0, tex="concrete.png", size=3.0, bump=0.3, emit=("#9a968c", 1.2))      # 照明の回り込みの代用(昼の露出でも内部が見える)
 _MAT["portal_concrete"] = dict(color="#808080", rough=0.9, metal=0.0, tex="concrete_formed.png", size=2.4, bump=0.8, tint="#bdb8ae", dirt=1)
 CONC = "concrete_tex"
 PCONC = "portal_concrete"
