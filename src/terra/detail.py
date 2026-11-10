@@ -15,10 +15,11 @@ from .masks.terrain import slope_aspect
 
 # near の散布ステップ(far のステップより密)。density は間隔 r を 1/sqrt(density) にする倍率
 NEAR_STEPS = [
-    ("scatter.trees", dict(r_m=3.4, exclude=["river", "lake"])),
+    ("scatter.trees", dict(r_m=3.4, exclude=["river", "lake", "road", "portal", "village_pads"])),
     ("scatter.shrubs", dict(r_m=0.9, shrub_density=0.2, grass_density=0.9, scale_mul=1.1, forest_grass=0.7)),
     ("scatter.rocks", dict(cliff_deg=54, density=4.0, boulder_density=0.12)),
     ("scatter.ground", dict(density=3.0)),
+    ("scatter.floor", dict(density=1.6)),
 ]
 STRATA = np.array([0.15, 0.5, 1.0, 0.6, 0.3])        # 岩種ごとの層理の強さ [花崗岩, 安山岩, 砂岩, 石灰岩, 凝灰岩]
 STEP = np.array([2.5, 1.4, 0.7, 1.1, 1.0])           # 層理の段の間隔[m]
@@ -41,6 +42,25 @@ def micro_relief(grid, rng, rock, soil, geo, z, slope):
     rk = np.maximum(rock, np.clip((slope - 28) / 15.0, 0, 1) * 0.85)           # 急斜面は土の下の岩が出る
     d = rk * steep * (1.5 * (crag - 0.45) + 0.6 * stair) + (rk * 0.09 + soil * 0.035) * (grit - 0.5) * 2 + soil * 0.25 * (hum - 0.5) * 2
     return d.astype(np.float32)
+
+
+def _portal_cover(fg, doc, h, cover=6.5):
+    """坑口の壁の位置より奥は、地形を路面+cover[m] 以上にする(細かい格子で立ち上がりを 1m 以内にし、坑口の開口を塞がない)"""
+    X, Y = fg.grid.xy()
+    h = h.astype(np.float64).copy()
+    for ln, pr in doc.vectors.get("portals", []):
+        pts = np.asarray(ln.coords)
+        wall, d = pts[-1], pts[-1] - pts[0]
+        d = d / max(np.hypot(*d), 1e-9)
+        rx, ry = X - wall[0], Y - wall[1]
+        a, lat = rx * d[0] + ry * d[1], np.abs(-rx * d[1] + ry * d[0])
+        m = (a >= 0) & (a <= 90) & (lat <= 7.0)
+        if not m.any():
+            continue
+        floor = pr["z"] + pr.get("grade", 0.0) * a + cover
+        w = np.clip(7.0 - lat, 0.0, 1.0) * np.clip(a / 0.5, 0.0, 1.0)
+        h = np.where(m, h + (np.maximum(h, floor) - h) * w, h)
+    return h.astype(np.float32)
 
 
 def make_near_doc(doc: Document, center, half=120.0, res=0.5, seed=0, scatter=True) -> Document:
@@ -77,10 +97,12 @@ def make_near_doc(doc: Document, center, half=120.0, res=0.5, seed=0, scatter=Tr
     if "road" in L:                                                        # 路盤は水平なまま(微細起伏を路面から 1m 離れるまで消す)
         from scipy.ndimage import distance_transform_edt
         rd = nn(L["road"]) > 0
+        if "village" in L:                                                 # 集落の敷地・取り付け道も平らなまま(ribbon が浮かない)
+            rd = rd | (nn(L["village"]) > 0)
         out.layers["road"] = rd.astype(np.float32)
         if rd.any():
             d = d * np.clip((distance_transform_edt(~rd) * res - 1.0) / 6.0, 0, 1)
-    out.set("height", h + d)
+    out.set("height", _portal_cover(out, doc, h + d))
     slope, aspect = slope_aspect(out.height, res)
     out.set("slope", slope)
     out.set("aspect", aspect)

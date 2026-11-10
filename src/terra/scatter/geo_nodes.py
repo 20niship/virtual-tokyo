@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy.ndimage import distance_transform_edt, gaussian_filter
+from scipy.ndimage import binary_dilation, distance_transform_edt, gaussian_filter
 
 from ..core.node import Node, node
 from ..geology.tables import ROCKS, SOILS
@@ -51,7 +51,7 @@ class Rocks(Node):
     density は全体の倍率(near プロファイルは 3〜4)"""
     inputs = ("slope", "aspect")
     scatter_outputs = ("rocks",)
-    defaults = dict(cliff_deg=54.0, boulder_density=0.04, exclude=["river", "lake", "road", "portal"], density=1.0)
+    defaults = dict(cliff_deg=54.0, boulder_density=0.04, exclude=["river", "lake", "road", "portal", "village_pads"], density=1.0, peaks=False)
 
     def run(self, doc, rng):
         p, g = self.params, doc.grid
@@ -103,6 +103,33 @@ class Rocks(Node):
             vv, cc = rng.integers(4, size=len(r)), rng.integers(2, size=len(r))
             names = [f"rock_river_boulder_{'sm'[int(q > 0.55)]}_{v}" if q < 0.7 else f"gravel_stone_round_{['medium', 'cobble'][c]}_{v}" for q, v, c in zip(r, vv, cc)]
             add(xy, names, rng.uniform(0.7, 1.5, len(xy)), np.zeros(len(xy)), rng.uniform(0, 6.28, len(xy)))
+        zfix = None
+        if "coast_cliff" in doc.layers:                                   # 岩石海岸(gen.sea_cliff): 崖脚に海食崖 module、波食棚の縁に暗い転石
+            sl, n = doc.meta.get("sea_level", 0.0), np.array(doc.meta["sea_dir"])
+            foot = binary_dilation(doc.layers["coast_cliff"] > 0, iterations=3) & (doc.height < sl + 5.0) & (doc.height > sl - 0.5)
+            jj, ii = np.nonzero(foot)                                      # 崖脚のセルから、間隔 16m の貪欲選択(細い帯なので全域ポアソンだと疎になる)
+            cand = np.stack([ii * g.res + g.x0 + g.res / 2, jj * g.res + g.y0 + g.res / 2], 1)[rng.permutation(len(ii))]
+            keep = []
+            for c in cand:
+                if all(np.hypot(*(c - cand[q])) >= 16.0 / np.sqrt(D) for q in keep):
+                    keep.append(int(np.flatnonzero((cand == c).all(1))[0]))
+            xy = cand[keep] if keep else np.zeros((0, 2))
+            if len(xy):
+                kk = rng.choice(["seacliff", "sandstone"], len(xy), p=[0.85, 0.15])
+                vv = rng.integers(0, 4, len(xy))
+                sc = rng.uniform(1.7, 2.2, len(xy))
+                add(xy + n * 2.0 * sc[:, None], [f"rock_{k}_seacliff_{v}" for k, v in zip(kk, vv)], sc, np.zeros(len(xy)), np.full(len(xy), np.arctan2(n[0], -n[1])) + rng.uniform(-0.15, 0.15, len(xy)))
+            tal = doc.layers["shore_talus"] * (~exclusion(doc, p["exclude"], 0.5))
+            xy, jj, ii = sample(g, 2.6 / np.sqrt(D), int(rng.integers(1 << 30)), (np.clip(tal, 0, 1) * 0.9).astype(np.float32), None, rng)
+            sz = rng.choice(3, len(xy), p=[0.5, 0.35, 0.15])
+            add(xy, [f"rock_seashore_boulder_{'sml'[z]}_{v}" for z, v in zip(sz, rng.choice([1, 3], len(xy)))], rng.uniform(0.7, 1.7, len(xy)), np.zeros(len(xy)), rng.uniform(0, 6.28, len(xy)))
+        if p["peaks"]:      # 岩山: 高所の急斜面に尖塔・突起 module
+            hi = doc.height > np.quantile(doc.height, 0.86)
+            m = hi & (slope > 28) & ~ex
+            xy, jj, ii = sample(g, 11.0 / np.sqrt(D), int(rng.integers(1 << 30)), m.astype(np.float32) * 0.5, None, rng)
+            if len(xy):
+                kk = rng.choice(["peakrock", "granite", "andesite", "tuff"], len(xy), p=[0.5, 0.2, 0.2, 0.1])
+                add(xy, [f"rock_{k}_spire_{v}" for k, v in zip(kk, rng.integers(0, 4, len(xy)))], rng.uniform(1.0, 2.2, len(xy)), np.zeros(len(xy)), rng.uniform(0, 6.28, len(xy)))
         xy = np.concatenate(xs)
         xy = xy + rng.uniform(-1.3, 1.3, xy.shape)            # 高密度域のポアソンディスクが六方格子状に見えないよう位置を崩す
         _put(doc, "rocks", xy, np.concatenate(yaws), np.concatenate(scs), np.concatenate(ks), A.names, pitch=np.concatenate(pits), zoff=-0.1)
@@ -113,7 +140,7 @@ class Ground(Node):
     """地面の質感 module を散布: 土パッチ(土種は soil_type)・河原の砂利/砂パッチ・ガレ場の礫パッチ。パッチは斜面に沿って傾ける。要 geology.zones"""
     inputs = ("soil_type", "slope", "aspect")
     scatter_outputs = ("ground",)
-    defaults = dict(soil_r_m=4.5, soil_prob=0.3, exclude=["river", "lake", "road", "portal"], density=1.0)
+    defaults = dict(soil_r_m=4.5, soil_prob=0.3, exclude=["river", "lake", "road", "portal", "village_pads"], density=1.0)
 
     def run(self, doc, rng):
         p, g = self.params, doc.grid

@@ -62,6 +62,12 @@ def terrain_object(doc: Document, name="terrain", box=None, stride=1, colors=Non
     verts = np.stack([x, y, z], -1).reshape(-1, 3).astype(np.float32)
     ii = (np.arange(ny - 1)[:, None] * nx + np.arange(nx - 1)[None, :]).ravel()
     quads = np.stack([ii, ii + 1, ii + nx + 1, ii + nx], 1).astype(np.int32)
+    bores = doc.vectors.get("tunnel_bores", [])
+    if bores:                                  # 坑口の壁の奥 3m の坑内は地形を抜く(盛った地形の段差が開口を塞がないように)
+        from shapely import contains_xy
+        from shapely.ops import unary_union
+        cx, cy = x.ravel()[quads].mean(1), y.ravel()[quads].mean(1)
+        quads = quads[~contains_xy(unary_union([b for b, _ in bores]), cx, cy)]
     me = bpy.data.meshes.new(name)
     me.vertices.add(len(verts))
     me.vertices.foreach_set("co", verts.ravel())
@@ -228,7 +234,11 @@ def photo_setup(doc, res, samples, time="day"):
     from . import modules  # noqa: F401  (rock_* 材質を vt.materials へ登録)
     _patch_textures()
     render.HAZE_K["day"] = 5e-5      # 山岳は数 km 先まで見えるので都市用(1.6e-4)より薄く: 5km で約22%
-    return render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65), time=time, realism=True)
+    sc = render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65), time=time, realism=True)
+    if os.environ.get("TERRA_CPU"):                 # GPU メモリが他の処理で埋まっているときは CPU レンダにする
+        import bpy
+        bpy.context.scene.cycles.device = "CPU"
+    return sc
 
 
 def make_camera(doc, view, box=None, lens=0, fstop=5.6, dof=True, seed=0, pose=None):
@@ -311,8 +321,28 @@ def water_geometry(doc: Document, min_width=3.0, lift=0.5):
     return V, F
 
 
+def add_sea(doc: Document):
+    """gen.sea_cliff の海面(doc.meta["sea_level"])。水平線まで届く大きな平面"""
+    import bpy
+    if "sea_level" not in doc.meta:
+        return None
+    z = doc.meta["sea_level"]
+    me = bpy.data.meshes.new("sea")
+    me.from_pydata([(-6e4, -6e4, z), (6e4, -6e4, z), (6e4, 6e4, z), (-6e4, 6e4, z)], [], [(0, 1, 2, 3)])
+    m = bpy.data.materials.new("terra_sea")
+    m.use_nodes = True
+    b = m.node_tree.nodes["Principled BSDF"]
+    b.inputs["Base Color"].default_value = (0.01, 0.17, 0.21, 1)
+    b.inputs["Roughness"].default_value = 0.07
+    me.materials.append(m)
+    o = bpy.data.objects.new("sea", me)
+    bpy.context.scene.collection.objects.link(o)
+    return o
+
+
 def add_water(doc: Document, **kw):
     import bpy
+    add_sea(doc)
     V, F = water_geometry(doc, **kw)
     if not V:
         return None
@@ -448,12 +478,12 @@ def bake_normal_image(doc: Document, name="terrain_nrm"):
     return im
 
 
-def add_roads(doc: Document):
+def add_roads(doc: Document, widen: float = 1.0):
     """道路の路面(アスファルト+白線)を曲面リボンで描く。橋・トンネルは module(road_furniture)が受け持つ"""
     import bpy
     from vt import render
     from .infra.roadmesh import road_mesh
-    m = road_mesh(doc)
+    m = road_mesh(doc, widen=widen)
     if not m.f:
         return None
     o = bpy.data.objects.new("roads", render.mesh_to_bpy("roads", m))
@@ -471,17 +501,21 @@ def road_poses(doc: Document):
     for P, z, pr in roads:
         if pr["kind"] != "road":
             continue
-        for i in range(2, len(P) - 8):
+        for i in range(10, len(P) - 8):
             d = P[i + 1] - P[i - 1]
             d /= max(np.hypot(*d), 1e-9)
             for sgn in (1, -1):
                 n = np.array([d[1], -d[0]]) * sgn
                 cut = zat(*(P[i] + n * 8.0)) - z[i]
-                if cut > best[0]:
-                    best = (cut, (P[i], d, n, z[i]))
+                if cut > best[0] and not any(np.hypot(*(P[i] - np.array(q.coords[0]))) < 40 for q, _ in doc.vectors.get("portals", [])):
+                    best = (cut, (P[i], d, n, z[i]), (P, z))
     if best[1] is not None:
         c, d, n, zr = best[1]
         loc = c - d * 16                                        # 路面の上(道路の手前)から切土法面を見る
+        P_, z_ = best[2]
+        k_ = int(np.argmin(np.hypot(*(P_ - c).T)))
+        k0 = max(k_ - 8, 0)                                     # 曲がっていても路面上の点(16m 手前)から撮る
+        loc, zr = P_[k0], float(z_[k0])
         out["road_cut"] = ((loc[0], loc[1], zr + 1.8), (c[0] + n[0] * 7, c[1] + n[1] * 7, zr + 3.5))
     br = [(pr["length"], P, z) for P, z, pr in roads if pr["kind"] == "bridge"]
     if br:
@@ -501,6 +535,28 @@ def road_poses(doc: Document):
         n = np.array([d[1], -d[0]])
         loc = P[0] - d * 28 + n * 8
         out["road_portal"] = ((loc[0], loc[1], zat(*loc) + 2.2), (P[0, 0], P[0, 1], pr["z"][0] + 2.5))
+    if tn:
+        ln, pr = max(tn, key=lambda t: t[1]["length"])
+        P, z = np.asarray(ln.coords), np.asarray(pr["z"])
+        k = min(5, len(P) - 1)
+        d = P[k] - P[0]
+        d /= max(np.hypot(*d), 1e-9)
+        loc = P[0] + d * 3.0
+        out["road_tunnel_in"] = ((loc[0], loc[1], z[0] + 1.5), (P[0, 0] + d[0] * 60, P[0, 1] + d[1] * 60, z[0] + 3.0))
+    vs = doc.scatter.get("village")
+    if vs is not None and len(vs["yaw"]):
+        c = vs["pos"].mean(0)
+        h = vs["pos"][int(np.argmin(np.hypot(*(vs["pos"][:, :2] - c[:2]).T)))]          # 集落の中心に最も近い建物を、斜め上から
+        loc = h[:2] + np.array([-26.0, -26.0])
+        out["road_village"] = ((loc[0], loc[1], max(zat(*loc), float(h[2])) + 9.0), (h[0], h[1], h[2] + 2.0))
+    if roads:
+        P, z = max([(P, z) for P, z, pr in roads if pr["kind"] == "road"], key=lambda t: len(t[0]))
+        k = len(P) // 2
+        d = P[k + 3] - P[k]
+        d /= max(np.hypot(*d), 1e-9)
+        n = np.array([d[1], -d[0]])
+        loc = P[k] - d * 9 + n * 2.0
+        out["road_ditch"] = ((loc[0], loc[1], z[k] + 1.2), (P[k, 0] + d[0] * 8 + n[0] * 3.5, P[k, 1] + d[1] * 8 + n[1] * 3.5, z[k] + 0.2))
     if roads:
         allp = np.concatenate([P for P, _, _ in roads])
         c = (allp.min(0) + allp.max(0)) / 2

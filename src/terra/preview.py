@@ -54,7 +54,7 @@ def render_top(doc, overlays=(), box=None, scale=1, exag=1.0):
             pts = [((x - g.x0) / g.res, g.ny - (y - g.y0) / g.res) for x, y in ln.coords]
             dr.line(pts, fill=col[pr["kind"]], width=3)
         for pt_, pr in doc.vectors.get("portals", []):
-            x, y = pt_.x, pt_.y
+            x, y = pt_.coords[-1]            # 線(トンネル端 → 坑口)の坑口側
             dr.ellipse([(x - g.x0) / g.res - 5, g.ny - (y - g.y0) / g.res - 5, (x - g.x0) / g.res + 5, g.ny - (y - g.y0) / g.res + 5], outline=(255, 255, 255), width=2)
     if scale != 1:
         pass

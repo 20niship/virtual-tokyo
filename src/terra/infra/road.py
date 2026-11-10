@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString, Point, Polygon
 
 from ..core.node import Node, node
 from ..masks.terrain import slope_aspect
@@ -24,10 +24,45 @@ def chaikin(pts, it=2):
     return pts
 
 
-def centerline(route, ds=DS):
+def _resample(P, ds):
+    d = np.r_[0, np.cumsum(np.hypot(*np.diff(P, axis=0).T))]
+    m = max(int(round(d[-1] / ds)), 2)
+    t = np.linspace(0, d[-1], m + 1)
+    return np.stack([np.interp(t, d, P[:, 0]), np.interp(t, d, P[:, 1])], 1)
+
+
+def limit_curvature(P, R, ds=DS, rounds=6, resample=True):
+    """最小曲線半径 R[m] を満たす線形にする。曲率 κ(s)=dθ/ds をガウスで広げて(旋回角の総量は保つ)最大 |κ| <= 1/R にし、始点から積分し直して
+    終点のずれは線形に配って戻す(両端は動かさない)。ヘアピンは半径 R の大きな弧に開く。
+    ponytail: 緩和曲線(クロソイド)ではなく曲率の平滑化で代用。端点付近の短い区間では 1/R を少し超えることがある(rounds 回の反復で収束させる)"""
+    P = np.asarray(P, float)
+    if len(P) < 4 or R <= 0:
+        return P
+    if resample:
+        P = _resample(P, ds)
+    a, b = P[0].copy(), P[-1].copy()
+    for _ in range(rounds):
+        d = np.diff(P, axis=0)
+        ds_ = np.hypot(*d.T)
+        th = np.unwrap(np.arctan2(d[:, 1], d[:, 0]))
+        k = np.diff(th) / ((ds_[:-1] + ds_[1:]) / 2)
+        if len(k) == 0 or np.abs(k).max() <= 1.0 / R:
+            break
+        k2, sg = k, 0.0
+        while np.abs(k2).max() > 1.0 / R and sg < 60:
+            sg += 0.5
+            k2 = gaussian_filter1d(k, sg, mode="constant")
+        th2 = th[0] + np.r_[0, np.cumsum(k2 * (ds_[:-1] + ds_[1:]) / 2)]
+        Q = np.vstack([a, a + np.cumsum(np.stack([np.cos(th2), np.sin(th2)], 1) * ds_[:, None], axis=0)])
+        s = np.r_[0, np.cumsum(ds_)]
+        P = Q + (b - Q[-1])[None, :] * (s / s[-1])[:, None]
+    return P
+
+
+def centerline(route, ds=DS, min_radius=0.0):
     """route: [(x, y, kind_in, z)]。通常の手が続く区間を Chaikin で平滑化し(橋・トンネルの弦は直線のまま)、ds 間隔に再標本化。
     路面高は探索で使った頂点の標高を弧長で線形補間する(隣り合う頂点間の勾配は探索で上限以内なので、縦断勾配が必ず守られる)。
-    返り値: xy(N,2), kind(N,) = その点から次の点への区間の種類, z(N,)"""
+    min_radius: 通常区間の最小曲線半径[m](0 で無効)。返り値: xy(N,2), kind(N,) = その点から次の点への区間の種類, z(N,)"""
     pts = np.array([[r[0], r[1]] for r in route], float)
     zv = np.array([r[3] for r in route], float)
     kin = [r[2] for r in route]
@@ -44,6 +79,8 @@ def centerline(route, ds=DS):
         frac = d0 / max(d0[-1], 1e-9)
         if k == NORMAL:
             seg = chaikin(seg, 4)
+            if min_radius > 0:
+                seg = limit_curvature(seg, min_radius, ds)
         d = np.r_[0, np.cumsum(np.hypot(*np.diff(seg, axis=0).T))]
         m = max(int(round(d[-1] / ds)), 1)
         t = np.linspace(0, d[-1], m + 1)[:-1]
@@ -54,7 +91,8 @@ def centerline(route, ds=DS):
     xy.append(pts[-1:])
     zz.append(zv[-1:])
     kd.append(kd[-1])
-    return np.concatenate(xy), np.array(kd, np.int8), np.concatenate(zz)
+    xy = np.concatenate(xy)
+    return xy, np.array(kd, np.int8), np.concatenate(zz)
 
 
 def design_profile(zanchor, kind, xy, gmax=0.10, iters=30):
@@ -115,9 +153,9 @@ class RoadNode(Node):
     要 hydro.rivers(橋の判定)。出力: height(切土盛土後)・road(路盤マスク)・cutfill[m]、ベクタ roads/tunnels/portals/road_stats"""
     inputs = ("height", "slope", "river", "water_depth")
     outputs = ("height", "road", "cutfill")
-    vec_outputs = ("roads", "tunnels", "portals", "road_stats")
+    vec_outputs = ("roads", "tunnels", "portals", "tunnel_bores", "road_stats")
     defaults = dict(connect=["village_a", "village_b"], max_grade=0.10, allow_tunnel=True, allow_bridge=True, width=6.5, clear_width=22.0,
-                    min_cover=10.0, tunnel_cost=40.0, bridge_cost=16.0, factor=4, cut_ratio=0.8, fill_ratio=1.5)
+                    min_cover=10.0, min_radius=15.0, shoulder=0.8, tunnel_cost=40.0, bridge_cost=16.0, factor=4, cut_ratio=0.8, fill_ratio=1.5)
 
     def run(self, doc, rng):
         import time
@@ -130,7 +168,7 @@ class RoadNode(Node):
         river = doc.layers.get("river", np.zeros(g.shape, np.float32))
         water = doc.layers.get("water_depth", np.zeros(g.shape, np.float32))
         road_mask = np.zeros(g.shape, np.float32)
-        segs, tun, por, stats = [], [], [], dict(length_m=0.0, bridges=0, bridge_m=0.0, tunnels=0, tunnel_m=0.0, max_grade=0.0, cut_m3=0.0, fill_m3=0.0, hairpins=0, min_radius_m=1e9, roads=0)
+        segs, tun, por, bores, stats = [], [], [], [], dict(length_m=0.0, bridges=0, bridge_m=0.0, tunnels=0, tunnel_m=0.0, max_grade=0.0, cut_m3=0.0, fill_m3=0.0, hairpins=0, min_radius_m=1e9, roads=0)
         for a, b in zip(p["connect"][:-1], p["connect"][1:]):
             z = doc.height
             slope, _ = slope_aspect(z, g.res)
@@ -138,21 +176,32 @@ class RoadNode(Node):
                                exist=(road_mask > 0), min_cover=p["min_cover"], tunnel_cost=p["tunnel_cost"], bridge_cost=p["bridge_cost"])
             if not route:
                 raise RuntimeError(f"経路が見つからない: {a} -> {b}(max_grade={p['max_grade']} を上げるか橋・トンネルを許可する)")
-            xy, kind, za = centerline(route)
+            xy, kind, za = centerline(route, min_radius=p["min_radius"])
             zr, pinned = design_profile(za, kind, xy, p["max_grade"])
-            res = earthwork.carve(doc, xy, zr, kind, p["width"], p["cut_ratio"], p["fill_ratio"], river, road_mask)
+            res = earthwork.carve(doc, xy, zr, kind, p["width"], p["cut_ratio"], p["fill_ratio"], river, road_mask, shoulder=p["shoulder"])
             segs += _segments(xy, zr, kind, p["width"], p["clear_width"])
             for ln, pr in _segments(xy, zr, kind, p["width"], p["clear_width"]):
                 if pr["kind"] == "tunnel":
                     tun.append((ln, pr))
-                    for end, sgn in ((0, 1), (-1, -1)):
-                        c = ln.coords[end]
-                        por.append((Point(c), dict(width=30.0, z=pr["z"][end])))
+                    P_ = np.asarray(ln.coords)
+                    sa_ = np.r_[0, np.cumsum(np.hypot(*np.diff(P_, axis=0).T))]
+                    for q, _, sc in tunnel.portals(P_):                 # 坑口: トンネル端 → 坑口 までの切り通しの線(散布の除外。幅 30m)
+                        end = 0.0 if sc < sa_[-1] / 2 else sa_[-1]
+                        line = [(float(np.interp(sf, sa_, P_[:, 0])), float(np.interp(sf, sa_, P_[:, 1]))) for sf in (end, (end + sc) / 2, sc)]
+                        g_ = (pr["z"][-1] - pr["z"][0]) / max(sa_[-1], 1e-9)             # 坑内へ入る向きの縦断勾配(near の坑口の盛土で使う)
+                        d_ = np.array(line[-1]) - np.array(line[0])
+                        d_ = d_ / max(np.hypot(*d_), 1e-9)
+                        n_ = np.array([-d_[1], d_[0]])
+                        w0 = np.array(line[-1])
+                        bores.append((Polygon([tuple(w0 + n_ * 4.4 - d_ * 1.5), tuple(w0 - n_ * 4.4 - d_ * 1.5), tuple(w0 - n_ * 4.4 + d_ * 3.0), tuple(w0 + n_ * 4.4 + d_ * 3.0)]), dict(kind="bore")))
+                        por.append((LineString(line), dict(width=30.0, z=float(np.interp(sc, sa_, pr["z"])), grade=float(g_ if end == 0.0 else -g_))))
             stats["length_m"] += float(np.sum(np.hypot(*np.diff(xy, axis=0).T)))
             grade = np.abs(np.diff(zr)) / np.hypot(*np.diff(xy, axis=0).T)
             stats["max_grade"] = max(stats["max_grade"], float(grade.max()))
-            k = curvature_stats(xy)
-            if len(k):
+            for ln, pr in _segments(xy, zr, kind, p["width"], p["clear_width"]):      # 最小半径は通常区間ごと(橋・トンネルの弦との継ぎ目は除く)
+                if pr["kind"] != "road" or len(ln.coords) < 8:
+                    continue
+                k = curvature_stats(np.asarray(ln.coords))
                 stats["min_radius_m"] = min(stats["min_radius_m"], float(1.0 / max(k.max(), 1e-6)))
                 stats["hairpins"] += int(np.sum(np.convolve((1.0 / np.maximum(k, 1e-6) < 25.0).astype(int), np.ones(10, int), "valid") >= 8) > 0)
             for s_ in bridge.find_bridges(xy, zr, kind, doc):
@@ -170,4 +219,5 @@ class RoadNode(Node):
         doc.vectors["roads"] = [s for s in segs if s[1]["kind"] != "tunnel"]
         doc.vectors["tunnels"] = tun
         doc.vectors["portals"] = por
+        doc.vectors["tunnel_bores"] = bores
         doc.vectors["road_stats"] = [(Point(0, 0), {k: (round(v, 3) if isinstance(v, float) else v) for k, v in stats.items()})]

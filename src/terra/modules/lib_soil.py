@@ -20,6 +20,19 @@ for _k in SOILS:
 _MAT["soil_mud_wet"] = _tex("soil_mud.png", 1.2, 0.06, 0.2, tint="#707070")
 
 
+def _puddle(m, c, lvl, zw):
+    """セルの 4 隅 c=[(x, y, z, rel)] を rel=lvl の線形補間の等高線で切り、低い側の多角形を水面の高さ zw に張る"""
+    poly = []
+    for a, b in zip(c, c[1:] + c[:1]):
+        if a[3] < lvl:
+            poly.append((a[0], a[1], zw + 0.002))
+        if (a[3] < lvl) != (b[3] < lvl):
+            t = (lvl - a[3]) / (b[3] - a[3])
+            poly.append((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, zw + 0.002))
+    if len(poly) >= 3:
+        m.poly(poly, "soil_mud_wet")
+
+
 def _patch(kind, v, lod):
     amp, fq = PARAM[kind]
 
@@ -64,9 +77,11 @@ def _patch(kind, v, lod):
                 if math.hypot(cx, cy) > 1.5 * (0.72 + 0.14 * math.sin(3 * tc + 2 * v) + 0.1 * math.sin(5 * tc + 1)):
                     continue
                 m.f.append((a, a + 1, a + n + 2, a + n + 1))
-                wet = kind == "mud" and rel[i:i + 2, j:j + 2].mean() < 0.3
-                m.m.append("soil_mud_wet" if wet else f"soil_{kind}")
+                m.m.append(f"soil_{kind}")
                 m.uv.append(None)
+                if kind == "mud":                                                    # 水たまり: 標高の等高線(rel=0.3)でセルを切った多角形(面単位の材質割り当てだと縁が三角形になる)
+                    _puddle(m, [(X[i, j], Y[i, j], h[i, j], rel[i, j]), (X[i, j + 1], Y[i, j + 1], h[i, j + 1], rel[i, j + 1]),
+                                (X[i + 1, j + 1], Y[i + 1, j + 1], h[i + 1, j + 1], rel[i + 1, j + 1]), (X[i + 1, j], Y[i + 1, j], h[i + 1, j], rel[i + 1, j])], 0.3, float(h.min() + 0.3 * np.ptp(h)))
         if kind == "scoria" and lod == "near":                                    # 小さな噴石
             from .lib_rock import rock_mesh
             for _ in range(10):

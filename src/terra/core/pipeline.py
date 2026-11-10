@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -26,6 +27,21 @@ def make_grid(g: dict) -> Grid:
         from ..source.gsi_dem import lonlat_grid
         return lonlat_grid(g["center_lonlat"], g.get("size_m", 1000), g.get("res_m", 4))
     return Grid.from_size(g.get("size_m", 1000), g.get("res_m", 4), g.get("crs", "local"), g.get("x0", 0.0), g.get("y0", 0.0))
+
+
+_CODE: dict = {}
+
+
+def code_hash(cls) -> str:
+    """ノード実装のコードハッシュ: ノードが属するサブパッケージ(infra/ など)と core/ の .py の内容。コードを変えるとキャッシュが自動で無効になる"""
+    pkg = Path(sys.modules[cls.__module__].__file__).parent
+    if pkg not in _CODE:
+        h = hashlib.sha256()
+        for d in {pkg, Path(__file__).parent}:
+            for f in sorted(d.glob("*.py")):
+                h.update(f.name.encode() + f.read_bytes())
+        _CODE[pkg] = h.hexdigest()[:12]
+    return _CODE[pkg]
 
 
 def _key(prev, label, params, seed):
@@ -74,7 +90,7 @@ def run_recipe(recipe, seed=None, out=None, cache=True, log=print, grid_over=Non
         seen[name] = n + 1
         label = name if n == 0 else f"{name}.{n}"
         nd = get_node(name)(**params)
-        key = _key(key, label, nd.params, seed)
+        key = _key(key, label, [nd.params, code_hash(type(nd))], seed)
         cp = cdir / f"{key}.npz"
         t = time.time()
         if cache and cp.exists():

@@ -1,0 +1,17 @@
+# 複雑な岩山(画像2: 尖塔・鞍部・割れ目・蜂の巣状ピット): 急峻な山体に層理の棚と節理ブロックを強く入れ、頂部へ spire module を置く。
+seed: 5
+grid: {size_m: 800, res_m: 2, crs: local}
+climate: {lat: 36.0, sea_level_temp_c: 15, precip_mm: 1800, wind_dir_deg: 270}
+steps:
+  - gen.noise: {kind: fbm, wavelength_m: 500, octaves: 4, gain: 0.5, base_height: 90, warp: 0.4, offset: 60}
+  - gen.noise: {kind: ridged, wavelength_m: 200, octaves: 5, gain: 0.5, base_height: 40, warp: 0.5}
+  - erosion.fluvial: {iterations: 20, k: 0.015}
+  - gen.crags: {strata_m: 5.0, amp: 2.0, noise_amp: 3.5, slope_deg: 28, peak_amp: 5.0, joint_m: 11, joint_amp: 1.2}
+  - masks.slope: {}
+  - hydro.flow: {}
+  - biome.jp_forest: {}
+  - geology.zones: {}
+  - scatter.trees: {r_m: 9}
+  - scatter.rocks: {cliff_deg: 50, peaks: true}
+  - scatter.ground: {}
+export: {heightmap: png16, geotiff: false, usd: true, splat: true}

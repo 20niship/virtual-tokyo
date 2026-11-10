@@ -1,0 +1,16 @@
+# 岩石海岸(画像1: 堆積岩の海食崖): 内陸の台地 → 海食崖(層理の棚・節理・ノッチ)→ 波食棚 → 海。崖には seacliff module、崖下に転石帯。
+seed: 11
+grid: {size_m: 800, res_m: 2, crs: local}
+climate: {lat: 33.0, sea_level_temp_c: 17, precip_mm: 1800, wind_dir_deg: 200}
+steps:
+  - gen.noise: {kind: fbm, wavelength_m: 300, octaves: 4, gain: 0.5, base_height: 30, warp: 0.3, offset: 10}
+  - gen.sea_cliff: {sea_dir_deg: 180, cliff_height: 22, cliff_run_m: 7, platform_m: 26, strata_m: 1.6}
+  - masks.slope: {}
+  - hydro.flow: {}
+  - biome.jp_forest: {}
+  - geology.zones: {}
+  - scatter.trees: {r_m: 6}
+  - scatter.shrubs: {r_m: 3}
+  - scatter.rocks: {}
+  - scatter.ground: {}
+export: {heightmap: png16, geotiff: false, usd: true, splat: true}

@@ -7,6 +7,7 @@ import numpy as np
 from vt import tree_gen as _tg
 from vt.materials import MATERIALS as _MAT
 
+from . import lib_rock_crag as _crag
 from . import lib_rock_sdf as _sdf
 from .lib_rock import _ICO, _ico, _noise_dir
 from .registry import reg
@@ -19,6 +20,8 @@ KINDS = {   # shape: round(丸い)/angular(角)/slab(板状・層理)/karst(溶�
     "limestone": dict(ja="石灰岩", tex="rock_limestone.png", tint="#f0eee8", size=2.6, shape="karst", cuts=6, rough=0.22, flat=0.7),
     "tuff": dict(ja="凝灰岩", tex="rock_tuff.png", tint="#e0d8c0", size=2.4, shape="soft", cuts=4, rough=0.20, flat=0.75),
     "seashore": dict(ja="海辺の岩(波食・穴だらけ)", tex="rock_granite.png", hi_gain=0.78, tint="#c8c6c0", size=2.4, shape="coastal", cuts=8, rough=0.18, flat=0.65),
+    "seacliff": dict(ja="海食崖の堆積岩(層理・黄褐)", tex="rock_sandstone.png", hi_gain=1.5, tint="#dcc48f", size=2.4, shape="slab", cuts=8, rough=0.12, flat=0.5),
+    "peakrock": dict(ja="岩山の多孔質岩(暗灰褐・蜂の巣)", tex="rock_granite.png", hi_gain=1.0, tint="#6f6a63", size=2.0, shape="coastal", cuts=8, rough=0.18, flat=0.65),
     "river": dict(ja="川原の丸石", tex="rock_river.png", tint="#d0ccc4", size=1.0, shape="round", cuts=0, rough=0.06, flat=0.62),
 }
 STATES = [
@@ -30,7 +33,9 @@ STATES = [
 ]
 for _k, _s in KINDS.items():
     _MAT[f"rk_{_k}"] = _tex(_s["tex"], _s["size"], 0.92 if _k != "river" else 0.6, 0.8, tint=_s["tint"])
-    _MAT[f"rk_{_k}_fresh"] = _tex(_s["tex"], _s["size"], 0.9, 0.7, tint="#ffffff")
+    _MAT[f"rkn_{_k}"] = dict(_tex(_s["tex"], _s["size"], 0.92, 0.9, tint=_s["tint"]), vcol=True)       # near/far の転石・露頭: 頂点色で塗る 1 材質(面単位の斑にしない)
+    _t = _sdf._rgb(_s["tint"])
+    _MAT[f"rk_{_k}_fresh"] = _tex(_s["tex"], _s["size"], 0.9, 0.7, tint=_sdf._hex(_t * 0.45 + 255 * 0.55 * 0.75))      # 欠けた新鮮面: 岩色を少し明るくした程度(真っ白のタイル状の三角形にしない)
     _MAT[f"rk_{_k}_lichen"] = _tex(_s["tex"], _s["size"], 0.95, 0.9, tint="#b9b27a")
     _MAT[f"rk_{_k}_stain"] = _tex(_s["tex"], _s["size"], 0.9, 0.8, tint="#6a625a")
 _sdf.register_materials(KINDS)
@@ -205,6 +210,29 @@ def column_bundle(m, R, rng, kind, lod):
     return cf
 
 
+def _to_vcol(m, kind, st, n0, rng, R):
+    """apply_state が面ごとに付けた岩の材質(rk_<岩種>*, rk_moss)を捨て、頂点 [0:n0) を位置の 3D ノイズ・法線・高さで塗る(斑の縁がポリゴン形状に依存しない)"""
+    V = np.array(m.v, float)[:n0]
+    nrm = np.zeros((n0, 3))
+    for f in m.f:
+        if max(f) < n0 and len(f) >= 3:
+            a = np.cross(V[f[1]] - V[f[0]], V[f[2]] - V[f[0]])
+            for j in f:
+                nrm[j] += a
+    nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-9)
+    if nrm[:, 2][V[:, 2] > np.median(V[:, 2])].mean() < 0:
+        nrm = -nrm                                                                       # 外向きに揃える(上側の面の法線は上向きのはず)
+    rn = np.random.default_rng(int(rng.random() * 2 ** 31))
+    st2 = dict(st, weathering=max(st["weathering"], 0.3))
+    ctx = dict(tone=lambda P: 0.0 * P[:, 2], pitdark=0)
+    col = _crag.vertex_colors(V, nrm, None, kind, "boulder", st2, rn, R, ctx, 1.0, tint_hex=KINDS[kind]["tint"])
+    m.vcol = np.concatenate([col, np.ones((len(m.v) - n0, 3), np.float32)])
+    base = f"rk_{kind}"
+    for i, mt in enumerate(m.m):
+        if mt == "rk_moss" or mt.startswith(base) and mt in (base, base + "_fresh", base + "_lichen", base + "_stain"):
+            m.m[i] = f"rkn_{kind}"
+
+
 def _rock_fn(kind, form, v, lod):
     st = STATES[v]
 
@@ -227,7 +255,10 @@ def _rock_fn(kind, form, v, lod):
                 cf += blob(m, rng.uniform(1.3, 2.3), rng, kind, st, lod, ctr=(rng.uniform(-1.8, 1.8), rng.uniform(-1.4, 1.4), rng.uniform(0, 0.8)), sink=0.3, flat=KINDS[kind]["flat"] * 0.65, sub_cap=5 if hi else 3)
         else:
             cf = blob(m, {"s": 0.35, "m": 0.9, "l": 2.2}[form[-1]], rng, kind, st, lod, sub_cap=6 if hi else 4)
+        n0 = len(m.v)
         apply_state(m, kind, rng, st, cf, grass=lod != "far" and form != "boulder_s")
+        if kind != "river" and form != "column":
+            _to_vcol(m, kind, st, n0, rng, {"s": 0.35, "m": 0.9, "l": 2.2}.get(form[-1], 1.8))
     return fn
 
 
@@ -264,6 +295,12 @@ def _cliff_geo(kind, v, lod):
     return fn
 
 
+def _crag_fn(kind, form, v, lod):
+    def fn(m, W, H, rng):
+        _crag.build_crag(m, kind, form, STATES[v], rng, lod, 22.0 if form == "seacliff" else 1.7)
+    return fn
+
+
 for _k in KINDS:
     for _v in range(len(STATES)):
         for _lod in ("near", "far", "hi"):
@@ -275,3 +312,10 @@ for _k in KINDS:
                 reg(f"rock_{_k}_cliff_{_v}{_sfx}", _cliff_geo(_k, _v, _lod), W=14.0, H=9.0, lod=_lod, kind=_k)
             if _k == "andesite" and _lod != "hi":
                 reg(f"rock_{_k}_column_{_v}{_sfx}", _rock_fn(_k, "column", _v, _lod), W=4.0, H=3.0, lod=_lod, kind=_k)
+
+CRAG_FORMS = {"seacliff": ("seacliff", "sandstone", "limestone", "tuff"), "spire": ("peakrock", "granite", "andesite", "tuff", "sandstone", "seashore")}
+for _form, _ks in CRAG_FORMS.items():       # 岩山・海食崖の大形状(near / far / hi)
+    for _k in _ks:
+        for _v in range(len(STATES)):
+            for _lod, _sfx in (("near", ""), ("far", "_far"), ("hi", "_hi")):
+                reg(f"rock_{_k}_{_form}_{_v}{_sfx}", _crag_fn(_k, _form, _v, _lod), W=22.0 if _form == "seacliff" else 5.0, H=13.0 if _form == "seacliff" else 4.0, lod=_lod, kind=_k)

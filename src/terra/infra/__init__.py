@@ -1,1 +1,1 @@
-from . import furniture, road  # noqa: F401  (ノード登録)
+from . import furniture, road, village  # noqa: F401  (ノード登録)
