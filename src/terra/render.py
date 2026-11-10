@@ -228,7 +228,11 @@ def photo_setup(doc, res, samples, time="day"):
     from . import modules  # noqa: F401  (rock_* 材質を vt.materials へ登録)
     _patch_textures()
     render.HAZE_K["day"] = 5e-5      # 山岳は数 km 先まで見えるので都市用(1.6e-4)より薄く: 5km で約22%
-    return render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65), time=time, realism=True)
+    sc = render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65), time=time, realism=True)
+    if os.environ.get("TERRA_CPU"):                 # GPU メモリが他の処理で埋まっているときは CPU レンダにする
+        import bpy
+        bpy.context.scene.cycles.device = "CPU"
+    return sc
 
 
 def make_camera(doc, view, box=None, lens=0, fstop=5.6, dof=True, seed=0, pose=None):
@@ -311,8 +315,28 @@ def water_geometry(doc: Document, min_width=3.0, lift=0.5):
     return V, F
 
 
+def add_sea(doc: Document):
+    """gen.sea_cliff の海面(doc.meta["sea_level"])。水平線まで届く大きな平面"""
+    import bpy
+    if "sea_level" not in doc.meta:
+        return None
+    z = doc.meta["sea_level"]
+    me = bpy.data.meshes.new("sea")
+    me.from_pydata([(-6e4, -6e4, z), (6e4, -6e4, z), (6e4, 6e4, z), (-6e4, 6e4, z)], [], [(0, 1, 2, 3)])
+    m = bpy.data.materials.new("terra_sea")
+    m.use_nodes = True
+    b = m.node_tree.nodes["Principled BSDF"]
+    b.inputs["Base Color"].default_value = (0.01, 0.17, 0.21, 1)
+    b.inputs["Roughness"].default_value = 0.07
+    me.materials.append(m)
+    o = bpy.data.objects.new("sea", me)
+    bpy.context.scene.collection.objects.link(o)
+    return o
+
+
 def add_water(doc: Document, **kw):
     import bpy
+    add_sea(doc)
     V, F = water_geometry(doc, **kw)
     if not V:
         return None
