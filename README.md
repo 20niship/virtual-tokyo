@@ -194,6 +194,10 @@ uv run python scripts/build_extra.py <spot> --round N   # 田舎/郊外/ロー�
 | `scripts/road_test_grid.py` | 道路・交差点のパターン確認 |
 | `scripts/build_city.py --spot ...` | 数百m四方のスポット生成とレンダ |
 | `scripts/probe_spots.py` | OSMからスポット座標を探す |
+| `scripts/build_realism.py <spot> --time day\|dusk\|night` | 昼・夕・夜のルック切替でスポットをレンダ |
+| `scripts/render_city_minimal.py` | フォトリアルレンダを最小コードで再現する例 |
+
+フォトリアルなルック(Blender 設定・空とライティング・露出・カメラ・後処理・材質・昼夕夜の違い)の詳細は [docs/city_rendering.md](docs/city_rendering.md) を参照。
 
 ## Gitのルール
 
