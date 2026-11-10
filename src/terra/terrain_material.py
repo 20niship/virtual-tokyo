@@ -123,15 +123,19 @@ def build(normal_image=None, bump=0.9, debug=None):
         t = mix(cols[k], wc.outputs[0], 1.0, "MULTIPLY")
         acc = t if acc is None else mix(acc, t, 1.0, "ADD")
     acc_dbg = acc
+    ng = N("ShaderNodeNewGeometry")
+    sz = N("ShaderNodeSeparateXYZ")
+    L(ng.outputs["Normal"], sz.inputs[0])
+    gentle = mathn("MULTIPLY", mathn("SUBTRACT", sz.outputs["Z"], 0.35), 4.0, True)               # 急斜面・切土面(法線 z < 0.35)には苔・地衣類の斑を出さない(土の滑らかな濃淡+粒だけ)
     # 苔・地衣類(岩と礫の上に、斑状に)
     # 斑の縁は頂点属性(moss/lichen)×ノイズのしきい値を滑らかに(clamp((n - a) * k))で出す。面単位の材質割り当てではない
     soft = lambda n, a, k: mathn("MULTIPLY", mathn("SUBTRACT", n, a), k, True)
-    rockw = mathn("ADD", mathn("ADD", r_w, s_w), mathn("MULTIPLY", l_w, 0.45), True)             # 岩・礫の上と、湿った林床の落ち葉の上にも苔
+    rockw = mathn("ADD", mathn("ADD", r_w, s_w), mathn("MULTIPLY", l_w, 0.15), True)             # 岩・礫の上と、湿った林床の落ち葉の上にも苔
     mnoise = soft(noise(1.3, 6.0), 0.40, 7.0)
-    moss_f = mathn("MULTIPLY", mathn("MULTIPLY", moss, rockw), mnoise, True)
-    acc = mix(acc, mix(img(PATHS["moss"], 0.6), (0.9, 0.95, 0.8), 0.3, "MULTIPLY"), mathn("MULTIPLY", moss_f, 0.85), "MIX")
-    lich_f = mathn("MULTIPLY", mathn("MULTIPLY", lichen, r_w), soft(noise(0.55, 5.0), 0.48, 7.0), True)
-    acc = mix(acc, (0.62, 0.60, 0.34), mathn("MULTIPLY", lich_f, 0.5), "MIX")
+    moss_f = mathn("MULTIPLY", mathn("MULTIPLY", mathn("MULTIPLY", moss, rockw), mnoise), gentle)
+    acc = mix(acc, mix(img(PATHS["moss"], 0.6), (0.9, 0.95, 0.8), 0.3, "MULTIPLY"), mathn("MULTIPLY", moss_f, 0.5), "MIX")
+    lich_f = mathn("MULTIPLY", mathn("MULTIPLY", mathn("MULTIPLY", lichen, r_w), soft(noise(0.55, 5.0), 0.48, 7.0)), gentle)
+    acc = mix(acc, (0.62, 0.60, 0.34), mathn("MULTIPLY", lich_f, 0.2), "MIX")
     # マクロの明暗・色味のムラ(約 45m と約 9m の 2 スケール)と、全体の反射率の抑え(裸地が一様な薄ベージュに見えないように)
     m1 = mathn("ADD", mathn("MULTIPLY", mathn("SUBTRACT", noise(45.0, 3.0), 0.5), 1.9), 0.82)
     m2 = mathn("ADD", mathn("MULTIPLY", mathn("SUBTRACT", noise(9.0, 4.0), 0.5), 0.8), 1.0)
@@ -139,9 +143,10 @@ def build(normal_image=None, bump=0.9, debug=None):
     macro = mathn("MULTIPLY", mathn("MULTIPLY", m1, m2), m0)
     warm = mix(acc, mix(acc, (1.0, 0.9, 0.78), 1.0, "MULTIPLY"), mathn("MULTIPLY", noise(30.0, 2.0), 1.4, True))      # 暖色/寒色の斑
     acc = mix(warm, (0.78, 0.78, 0.78), 1.0, "MULTIPLY")
-    # 樹冠下の光斑(木漏れ日): 落ち葉の層の上に、暖色で明るい斑を ~1m 周期で足す(空の散乱光だけの青暗い無地に見えないように)。控えめな演出
-    fleck = mathn("MULTIPLY", soft(noise(1.2, 3.0, 0.5), 0.58, 6.0), mathn("MULTIPLY", l_w, 0.7), True)
-    acc = mix(acc, mix(acc, (1.9, 1.7, 1.35), 1.0, "MULTIPLY"), fleck, "MIX")
+    # 樹冠下の光斑(木漏れ日): 平らな林床(法線 z > 0.8)の落ち葉の上だけに、0.3〜1.5m の小さな斑を弱いコントラストで足す。斜面・切土面には出さない
+    flat = mathn("MULTIPLY", mathn("SUBTRACT", sz.outputs["Z"], 0.8), 8.0, True)
+    fleck = mathn("MULTIPLY", mathn("MULTIPLY", soft(noise(0.7, 3.0), 0.58, 6.0), mathn("MULTIPLY", l_w, 0.35)), flat)
+    acc = mix(acc, mix(acc, (1.35, 1.22, 1.05), 1.0, "MULTIPLY"), fleck, "MIX")
     mc = N("ShaderNodeCombineColor")
     for i in range(3):
         L(macro, mc.inputs[i])

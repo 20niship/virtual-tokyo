@@ -44,6 +44,25 @@ def micro_relief(grid, rng, rock, soil, geo, z, slope):
     return d.astype(np.float32)
 
 
+def _portal_cover(fg, doc, h, cover=6.5):
+    """坑口の壁の位置より奥は、地形を路面+cover[m] 以上にする(細かい格子で立ち上がりを 1m 以内にし、坑口の開口を塞がない)"""
+    X, Y = fg.grid.xy()
+    h = h.astype(np.float64).copy()
+    for ln, pr in doc.vectors.get("portals", []):
+        pts = np.asarray(ln.coords)
+        wall, d = pts[-1], pts[-1] - pts[0]
+        d = d / max(np.hypot(*d), 1e-9)
+        rx, ry = X - wall[0], Y - wall[1]
+        a, lat = rx * d[0] + ry * d[1], np.abs(-rx * d[1] + ry * d[0])
+        m = (a >= 0) & (a <= 90) & (lat <= 7.0)
+        if not m.any():
+            continue
+        floor = pr["z"] + pr.get("grade", 0.0) * a + cover
+        w = np.clip(7.0 - lat, 0.0, 1.0) * np.clip(a / 0.5, 0.0, 1.0)
+        h = np.where(m, h + (np.maximum(h, floor) - h) * w, h)
+    return h.astype(np.float32)
+
+
 def make_near_doc(doc: Document, center, half=120.0, res=0.5, seed=0, scatter=True) -> Document:
     g = doc.grid
     # 穴の縁を粗い格子のセル中心に合わせる(far メッシュとひび割れ無しでつながる)
@@ -83,7 +102,7 @@ def make_near_doc(doc: Document, center, half=120.0, res=0.5, seed=0, scatter=Tr
         out.layers["road"] = rd.astype(np.float32)
         if rd.any():
             d = d * np.clip((distance_transform_edt(~rd) * res - 1.0) / 6.0, 0, 1)
-    out.set("height", h + d)
+    out.set("height", _portal_cover(out, doc, h + d))
     slope, aspect = slope_aspect(out.height, res)
     out.set("slope", slope)
     out.set("aspect", aspect)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
-from shapely.geometry import LineString, Point
+from shapely.geometry import LineString, Point, Polygon
 
 from ..core.node import Node, node
 from ..masks.terrain import slope_aspect
@@ -153,7 +153,7 @@ class RoadNode(Node):
     要 hydro.rivers(橋の判定)。出力: height(切土盛土後)・road(路盤マスク)・cutfill[m]、ベクタ roads/tunnels/portals/road_stats"""
     inputs = ("height", "slope", "river", "water_depth")
     outputs = ("height", "road", "cutfill")
-    vec_outputs = ("roads", "tunnels", "portals", "road_stats")
+    vec_outputs = ("roads", "tunnels", "portals", "tunnel_bores", "road_stats")
     defaults = dict(connect=["village_a", "village_b"], max_grade=0.10, allow_tunnel=True, allow_bridge=True, width=6.5, clear_width=22.0,
                     min_cover=10.0, min_radius=15.0, shoulder=0.8, tunnel_cost=40.0, bridge_cost=16.0, factor=4, cut_ratio=0.8, fill_ratio=1.5)
 
@@ -168,7 +168,7 @@ class RoadNode(Node):
         river = doc.layers.get("river", np.zeros(g.shape, np.float32))
         water = doc.layers.get("water_depth", np.zeros(g.shape, np.float32))
         road_mask = np.zeros(g.shape, np.float32)
-        segs, tun, por, stats = [], [], [], dict(length_m=0.0, bridges=0, bridge_m=0.0, tunnels=0, tunnel_m=0.0, max_grade=0.0, cut_m3=0.0, fill_m3=0.0, hairpins=0, min_radius_m=1e9, roads=0)
+        segs, tun, por, bores, stats = [], [], [], [], dict(length_m=0.0, bridges=0, bridge_m=0.0, tunnels=0, tunnel_m=0.0, max_grade=0.0, cut_m3=0.0, fill_m3=0.0, hairpins=0, min_radius_m=1e9, roads=0)
         for a, b in zip(p["connect"][:-1], p["connect"][1:]):
             z = doc.height
             slope, _ = slope_aspect(z, g.res)
@@ -188,7 +188,13 @@ class RoadNode(Node):
                     for q, _, sc in tunnel.portals(P_):                 # 坑口: トンネル端 → 坑口 までの切り通しの線(散布の除外。幅 30m)
                         end = 0.0 if sc < sa_[-1] / 2 else sa_[-1]
                         line = [(float(np.interp(sf, sa_, P_[:, 0])), float(np.interp(sf, sa_, P_[:, 1]))) for sf in (end, (end + sc) / 2, sc)]
-                        por.append((LineString(line), dict(width=30.0, z=float(np.interp(sc, sa_, pr["z"])))))
+                        g_ = (pr["z"][-1] - pr["z"][0]) / max(sa_[-1], 1e-9)             # 坑内へ入る向きの縦断勾配(near の坑口の盛土で使う)
+                        d_ = np.array(line[-1]) - np.array(line[0])
+                        d_ = d_ / max(np.hypot(*d_), 1e-9)
+                        n_ = np.array([-d_[1], d_[0]])
+                        w0 = np.array(line[-1])
+                        bores.append((Polygon([tuple(w0 + n_ * 4.4 - d_ * 1.5), tuple(w0 - n_ * 4.4 - d_ * 1.5), tuple(w0 - n_ * 4.4 + d_ * 3.0), tuple(w0 + n_ * 4.4 + d_ * 3.0)]), dict(kind="bore")))
+                        por.append((LineString(line), dict(width=30.0, z=float(np.interp(sc, sa_, pr["z"])), grade=float(g_ if end == 0.0 else -g_))))
             stats["length_m"] += float(np.sum(np.hypot(*np.diff(xy, axis=0).T)))
             grade = np.abs(np.diff(zr)) / np.hypot(*np.diff(xy, axis=0).T)
             stats["max_grade"] = max(stats["max_grade"], float(grade.max()))
@@ -213,4 +219,5 @@ class RoadNode(Node):
         doc.vectors["roads"] = [s for s in segs if s[1]["kind"] != "tunnel"]
         doc.vectors["tunnels"] = tun
         doc.vectors["portals"] = por
+        doc.vectors["tunnel_bores"] = bores
         doc.vectors["road_stats"] = [(Point(0, 0), {k: (round(v, 3) if isinstance(v, float) else v) for k, v in stats.items()})]

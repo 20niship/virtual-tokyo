@@ -13,7 +13,9 @@ _MAT["tunnel_dark"] = dict(color="#050505", rough=1.0, metal=0.0)
 _MAT["road_concrete_old"] = dict(color="#8d8b84", rough=0.92, metal=0.0, tex="concrete.png", size=3.0, bump=0.5)
 _MAT["tunnel_lamp"] = dict(color="#fff0d0", rough=0.5, metal=0.0, emit=("#ffe6b8", 40.0))
 _MAT["tunnel_wall"] = dict(color="#b9b6ac", rough=0.8, metal=0.0, tex="concrete.png", size=3.0, bump=0.3)
+_MAT["portal_concrete"] = dict(color="#808080", rough=0.9, metal=0.0, tex="concrete_formed.png", size=2.4, bump=0.8, tint="#bdb8ae", dirt=1)
 CONC = "concrete_tex"
+PCONC = "portal_concrete"
 
 
 def _guardrail(lod):
@@ -81,15 +83,15 @@ def _portal(v, lod):
         top = 7.0 + (1.0 if v == 1 else 0.0)
         for side in (-1, 1):
             x0, x1 = (3.75, wall_w / 2) if side > 0 else (-wall_w / 2, -3.75)
-            m.box(x0, -t, 0.0, x1, 0.0, top, CONC)
-        m.box(-3.75, -t, 5.0, 3.75, 0.0, top, CONC)                                                              # 欄間
+            m.box(x0, -t, 0.0, x1, 0.0, top, PCONC)
+        m.box(-3.75, -t, 5.0, 3.75, 0.0, top, PCONC)                                                              # 欄間
         if lod == "far":
             m.box(-3.75, 0.0, 0.0, 3.75, 3.0, 5.0, "tunnel_dark")                                                # 遠景は坑内を暗い箱で省略(near は tunnel_inner_8m が受け持つ)
         if v == 1:                                                                                               # ひさし
             m.box(-wall_w / 2 - 0.3, -t - 1.5, top - 0.5, wall_w / 2 + 0.3, 0.0, top, "rc_concrete")
         if v == 2:                                                                                               # ウイング壁(斜め)
             for side in (-1, 1):
-                m.box(side * (wall_w / 2) - 0.3, -t, 0.0, side * (wall_w / 2) + 0.3, 5.0, top - 1.5, CONC)
+                m.box(side * (wall_w / 2) - 0.3, -t, 0.0, side * (wall_w / 2) + 0.3, 5.0, top - 1.5, PCONC)
         if lod == "near":
             m.box(-3.9, -t - 0.05, 4.95, 3.9, 0.05, 5.15, "rc_concrete")                                         # 開口上端の見切り
             for side in (-1, 1):
@@ -153,12 +155,9 @@ def _tunnel_inner(lod):
         n = 16
         arc = lambda r: [(z0 + r * math.sin(math.pi * i / n), r * math.cos(math.pi * i / n)) for i in range(n + 1)]       # (z, x): 右 → 天井 → 左
         inner = [(0.0, R)] + arc(R) + [(0.0, -R)]
-        outer = arc(R + 0.5)
         y0, y1 = -L / 2, L / 2
         for (za, xa), (zb, xb) in zip(inner, inner[1:]):               # 覆工の内面(法線は軸の側)
             m.oriented([(xa, y0, za), (xa, y1, za), (xb, y1, zb), (xb, y0, zb)], (-(xa + xb) / 2, 0.0, z0 - (za + zb) / 2), "tunnel_wall")
-        for (za, xa), (zb, xb) in zip(outer, outer[1:]):               # 覆工の外面(地山側。地形の下で見えない)
-            m.oriented([(xa, y0, za), (xa, y1, za), (xb, y1, zb), (xb, y0, zb)], ((xa + xb) / 2, 0.0, (za + zb) / 2 - z0), "tunnel_dark")
         m.box(-R - 0.5, y0, -0.6, R + 0.5, y1, 0.0, CONC)               # 路盤
         m.box(-R + 0.5, y0, 0.0, R - 0.5, y1, 0.03, "asphalt")          # 路面(車道 6.5m)
         for sd in (-1, 1):

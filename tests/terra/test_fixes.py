@@ -113,3 +113,17 @@ def test_conifer_atlas():
     for nm, c in json.load(open("assets/terra/textures/conifer_atlas.json"))["cards"].items():
         x, y, w, h = c["rect"]
         assert (a[y:y + h, x:x + w, 3] > 128).mean() > 0.1, nm                         # 各カードに葉がある
+
+
+def test_portal_bore_hole_and_cover():
+    from terra import detail
+    doc = run(make_doc("ridge"))
+    assert len(doc.vectors["tunnel_bores"]) == 2 and all("grade" in pr for _, pr in doc.vectors["portals"])
+    ln, pr = doc.vectors["portals"][0]
+    w = np.array(ln.coords[-1])
+    d = w - np.array(ln.coords[0])
+    d /= np.hypot(*d)
+    h = detail._portal_cover(doc, doc, doc.height)                              # 壁の奥は路面 +6.5m 以上(覆工の頂部 5.5m より上)
+    hf = type(doc.heightfield())(doc.grid, h)
+    q = w + d * 6.0
+    assert hf.sample(np.array([q[0]]), np.array([q[1]]))[0] >= pr["z"] + pr["grade"] * 6.0 + 6.0

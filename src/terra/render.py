@@ -62,6 +62,12 @@ def terrain_object(doc: Document, name="terrain", box=None, stride=1, colors=Non
     verts = np.stack([x, y, z], -1).reshape(-1, 3).astype(np.float32)
     ii = (np.arange(ny - 1)[:, None] * nx + np.arange(nx - 1)[None, :]).ravel()
     quads = np.stack([ii, ii + 1, ii + nx + 1, ii + nx], 1).astype(np.int32)
+    bores = doc.vectors.get("tunnel_bores", [])
+    if bores:                                  # 坑口の壁の奥 3m の坑内は地形を抜く(盛った地形の段差が開口を塞がないように)
+        from shapely import contains_xy
+        from shapely.ops import unary_union
+        cx, cy = x.ravel()[quads].mean(1), y.ravel()[quads].mean(1)
+        quads = quads[~contains_xy(unary_union([b for b, _ in bores]), cx, cy)]
     me = bpy.data.meshes.new(name)
     me.vertices.add(len(verts))
     me.vertices.foreach_set("co", verts.ravel())

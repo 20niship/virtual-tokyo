@@ -9,9 +9,9 @@ from scipy.spatial import cKDTree
 from .route import NORMAL, TUNNEL
 
 STEEP = ((30.0, 1.0), (42.0, 0.5), (90.0, 0.25))   # 地形の傾斜[度]の上限 → 法面比の倍率(急斜面は擁壁・岩盤切土で法面を立てる)
-PORTAL_LEN = 16.0     # 坑口の切り通し長[m]
+PORTAL_LEN = 18.5     # 切り通しの長さ[m](坑口の壁は 16m の位置。壁の奥 2.5m も路面高に掘り、盛土の立ち上がりを壁の裏に隠す)
 WALL_BAY = 1.4        # 擁壁を置く平場の追加幅[m]
-COVER = 7.0           # 坑口の奥で確保する地形の高さ(路面から。覆工の頂部 5.5m + 土 1.5m)
+COVER = 6.5           # 坑口の奥で確保する地形の高さ(路面から。覆工の頂部 5.5m + 土 1.5m)
 REACH = 70.0          # 法面の最大水平距離[m]
 
 
@@ -52,7 +52,7 @@ def carve(doc, xy, z, kind, width, cut_ratio, fill_ratio, river, road_mask, port
             mine = np.zeros(len(x), bool)
             mine[r] = True
             a0, a1 = t[r[0]] + PORTAL_LEN, t[r[-1]] - PORTAL_LEN          # 坑口の位置(弧長)。盛土は坑口の壁(の位置)から奥へ。点の 5m 手前まで 1、6m で 0
-            deep |= mine & (((t >= a0 + 5) & (t <= a0 + 86)) | ((t <= a1 - 5) & (t >= a1 - 86)))
+            deep |= mine & (((t >= a0 + 4.5) & (t <= a0 + 86)) | ((t <= a1 - 4.5) & (t >= a1 - 86)))
     if not use.any():
         return dict(cut_m3=0.0, fill_m3=0.0)
     from ..masks.terrain import slope_aspect
