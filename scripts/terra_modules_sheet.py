@@ -17,7 +17,7 @@ from terra.core.grid import Grid  # noqa: E402
 from vt import render as vr  # noqa: E402
 
 ap = argparse.ArgumentParser()
-ap.add_argument("sheet", choices=["rocks", "forms", "soils", "gravel", "far", "hi", "hi_forms", "road"])
+ap.add_argument("sheet", choices=["rocks", "forms", "soils", "gravel", "far", "hi", "hi_forms", "road", "crag", "crag_hi"])
 ap.add_argument("-o", "--out", default="out/terra/modules")
 ap.add_argument("--only", default="", help="カンマ区切りで行ラベルを絞る(近影用)")
 ap.add_argument("--cols", type=int, default=0, help="先頭から何列使うか")
@@ -47,6 +47,12 @@ elif a.sheet == "hi":   # 超高ポリ(_hi): 岩種 × 状態(新鮮・風化・
 elif a.sheet == "hi_forms":   # 形違い: 露頭・崖・中型の転石
     rows = [(k, [f"rock_{k}_outcrop_2_hi", f"rock_{k}_boulder_m_1_hi", f"rock_{k}_cliff_2_hi"], ["outcrop", "boulder m", "cliff"]) for k in ("granite", "andesite", "seashore")]
     sp, sc = 9.0, 1.0
+elif a.sheet == "crag":   # 海食崖・岩山の突起(near): 岩種 × 状態
+    rows = [(f"{k} {f}", [f"rock_{k}_{f}_{v}" for v in range(4)], ST) for f, k in (("seacliff", "seacliff"), ("seacliff", "sandstone"), ("spire", "peakrock"), ("spire", "granite"), ("spire", "andesite"))]
+    sp, sc = 6.5, 1.0
+elif a.sheet == "crag_hi":   # 同(超高ポリ)
+    rows = [(f"{k} {f}", [f"rock_{k}_{f}_{v}_hi" for v in (0, 1, 2)], ["fresh", "weathered", "mossy"]) for f, k in (("seacliff", "seacliff"), ("spire", "peakrock"), ("spire", "granite"))]
+    sp, sc = 6.5, 1.0
 elif a.sheet == "road":
     rows = [("furniture", ["road_guardrail_4m", "road_retwall_4m", "road_rocknet_8m", "road_curve_mirror"], ["guardrail", "retaining wall", "rockfall net", "curve mirror"]),
             ("portal", ["tunnel_portal_0", "tunnel_portal_1", "tunnel_portal_2", "tunnel_portal_2_far"], ["portal0", "portal1(canopy)", "portal2(wing)", "portal2 far"]),
@@ -83,7 +89,7 @@ for r, (label, names, cols) in enumerate(rows):
         if mesh is None:
             from vt.modules.library import get
             mesh = get(n)
-        s = 0.28 if "cliff" in n else sc
+        s = 0.25 if "seacliff" in n else 1.0 if "spire" in n else 0.28 if "cliff" in n else sc
         o = bpy.data.objects.new(n, vr.mesh_to_bpy(n, mesh))
         o.location = (c * sp, (len(rows) - 1 - r) * sp, 0)
         o.scale = (s, s, s)

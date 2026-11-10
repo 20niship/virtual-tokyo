@@ -6,7 +6,7 @@ from . import lib_rock_sdf as S
 from .lib_rock_sdf import Field, _smax, fbm_pts
 
 # lod ごとのボクセル寸法の係数(hi=1)と、実行する彫刻
-LOD_H = {"hi": 1.0, "near": 3.4, "far": 10.0}
+LOD_H = {"hi": 1.0, "near": 1.9, "far": 7.0}
 
 
 def _hash(ix, iy, iz, salt):
@@ -131,7 +131,7 @@ def seacliff(f, W, D, H, rng_np, sp, st, lod):
     seacliff_sdf(f, W, D, H, rng_np, st, ctx)
     h = f.h
     # 洞状の窪み(ノッチの奥)とオーバーハングの下の庇
-    for _ in range(3):
+    for _ in range(3 if lod == "hi" else 1):
         c = np.array([rng_np.uniform(-W * 0.35, W * 0.35), rng_np.uniform(0.2, 1.0), rng_np.uniform(0.4, 1.6)])
         sl = f.box(c, 3.0)
         if sl is None:
@@ -146,7 +146,7 @@ def seacliff(f, W, D, H, rng_np, sp, st, lod):
     for s_, a_ in ((1.1, 0.12), (0.45, 0.2), (0.2, 0.28)):
         if s_ < 3.2 * h:
             continue
-        honeycomb(f, s_, lambda P, a_=a_: np.clip(a_ * (1.0 + 1.1 * nz_(P)) * (1.1 - 0.7 * z_c(P)), 0, 0.9), rng_np)
+        honeycomb(f, s_, lambda P, a_=a_ * (1.0 if lod == "hi" else 0.35): np.clip(a_ * (1.0 + 1.1 * nz_(P)) * (1.1 - 0.7 * z_c(P)), 0, 0.9), rng_np)
     ctx["tafoni"] = True
     return ctx
 
@@ -220,10 +220,7 @@ def build_crag(m, kind, form, st, rng, lod="hi", size=None):
     mats = S._assign(v, fa, nr, f, st2, kind, rng_np, A, zbase, sp, ctx)
     base = len(m.v)
     m.v.extend(map(tuple, v.tolist()))
-    if form == "seacliff":                                                                  # 面が -y を向くよう反転
-        m.f.extend((base + a, base + c, base + b) for a, b, c in fa.tolist())
-    else:
-        m.f.extend((base + a, base + b, base + c) for a, b, c in fa.tolist())
+    m.f.extend((base + a, base + b, base + c) for a, b, c in fa.tolist())
     m.m.extend(mats)
     m.uv.extend([None] * len(fa))
     m.smooth = True

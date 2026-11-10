@@ -261,7 +261,7 @@ def _mesh_from(f):
 def _assign(v, fa, nr, f, st, kind, rng_np, R, zbase, spec, ctx=None):
     """面ごとの材質: 明度の色ムラ・窪み・稜線・新鮮面・錆び・地衣類・苔・濡れ"""
     cen = v[fa].mean(1)
-    fn = nr[fa].mean(1)
+    fn = -nr[fa].mean(1)                                                              # skimage の法線は内向き(d<0 が内側)なので外向きへ
     fn /= np.maximum(np.linalg.norm(fn, axis=1, keepdims=True), 1e-9)
     nz = fn[:, 2]
     # 曲率(ガウシアンした d のラプラシアン): 小スケール=稜線/細かい窪み、大スケール=大きな窪み
@@ -305,7 +305,7 @@ def _assign(v, fa, nr, f, st, kind, rng_np, R, zbase, spec, ctx=None):
         var = np.where(pit & (ctx.get("pitdark", 0) > 0), "dark", var)
     if st["lichen"] > 0:
         edge = 0.4 * np.tanh(cs * 0.6) if ctx else 0.0                                 # 地衣類は上面・縁(凸部)に優先
-        lich = (nz > 0.05) & (pat * 0.7 + pat2 * 0.3 + edge + (0.25 * nz if ctx else 0) > 0.55 - 0.9 * st["lichen"]) & ~dark
+        lich = (nz > 0.05) & (pat * 0.7 + pat2 * 0.3 + edge + (0.4 * nz + 0.5 * (cen[:, 2] - cen[:, 2].min()) / max(float(np.ptp(cen[:, 2])), 1e-6) if ctx else 0) > 0.55 - 0.9 * st["lichen"]) & ~dark
         kind_l = np.where(pat2 > 0.2, "lich_y", np.where(pat2 > -0.2, "lich_g", "lich_w"))
         var = np.where(lich, kind_l, var)
     if st["moss"] > 0:
