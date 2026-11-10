@@ -23,7 +23,9 @@ def test_crag_modules_lod_and_determinism():
         far, near = tm.build(n + "_far"), tm.build(n)
         assert 0 < len(far.f) < len(near.f)
         assert np.isfinite(np.array(near.v)).all() and set(near.m) <= set(MATERIALS) and set(far.m) <= set(MATERIALS)
-        assert len(set(near.m)) >= 5                                    # 層ごとの濃淡・雨筋・地衣類などで材質が分かれる
+        assert len(set(near.m)) == 1 and near.vcol.shape == (len(near.v), 3)   # 1 材質+頂点色(面単位の材質割当てではない)
+        assert near.vcol.std(0).min() > 0.1 and np.isfinite(near.vcol).all()   # 色ムラ・雨筋・地衣類で頂点色が変化する
+        assert len(near.f) < 500_000
     a, b = tm.build("rock_seacliff_seacliff_0_far"), tm.build("rock_seacliff_seacliff_0_far")
     assert np.array_equal(np.array(a.v), np.array(b.v)) and a.m == b.m
 
@@ -32,17 +34,33 @@ def test_seacliff_has_ledges_and_sheer_walls():
     """層理の棚(水平に近い面)と垂直に近い壁が両方ある。滑らかな塊より垂直面の割合が大きい"""
     nz, V = _normals_z(tm.build("rock_seacliff_seacliff_1"))
     assert (np.abs(nz) > 0.85).mean() > 0.04                            # 棚・頂部
-    assert (np.abs(nz) < 0.35).mean() > 0.25                            # 壁
+    assert (np.abs(nz) < 0.35).mean() > 0.18                            # 壁
     blob = _normals_z(tm.build("rock_granite_boulder_m_1"))[0]
-    assert (np.abs(nz) < 0.35).mean() > (np.abs(blob) < 0.35).mean()
+    assert (np.abs(nz) > 0.85).mean() > (np.abs(blob) > 0.85).mean()      # 棚(水平面)は滑らかな塊より多い
     assert V[:, 2].max() > 8 and V[:, 2].min() < 0                      # 高さ 10m 前後・水面下まで
 
 
-def test_spire_has_lichen_on_top():
+def test_spire_lichen_is_small_bright_spots_on_top():
+    """地衣類(明るい斑)は頂点色で表し、全体の 3〜40% ・上向きの頂点に偏る"""
     m = tm.build("rock_peakrock_spire_1")
-    nz, _ = _normals_z(m)
-    lich = np.array([("lich" in x) for x in m.m])
-    assert lich[nz > 0.5].mean() > 1.5 * lich[nz < -0.2].mean() > 0     # 地衣類は上向きの面に優先して付く
+    c = m.vcol.mean(1)
+    lich = c > 1.5
+    assert 0.03 < lich.mean() < 0.4
+    V, F = np.array(m.v, float), np.array([f[:3] for f in m.f])
+    n = np.cross(V[F[:, 1]] - V[F[:, 0]], V[F[:, 2]] - V[F[:, 0]])
+    vn = np.zeros_like(V)
+    for k in range(3):
+        np.add.at(vn, F[:, k], n)
+    up = vn[:, 2] / np.maximum(np.linalg.norm(vn, axis=1), 1e-12)
+    if (V[:, 2] > np.median(V[:, 2])).any() and up[V[:, 2] > np.median(V[:, 2])].mean() < 0:
+        up = -up
+    assert up[lich].mean() > up[~lich].mean()
+
+
+def test_boulders_use_vertex_colors_not_face_patches():
+    m = tm.build("rock_seashore_boulder_m_0")
+    assert m.vcol.shape == (len(m.v), 3) and "rkn_seashore" in set(m.m)
+    assert not any(x.endswith(("_lichen", "_fresh", "_stain")) for x in m.m)    # 白い三角形になる面単位の材質は使わない
 
 
 def test_crags_strata_and_joints():

@@ -41,9 +41,11 @@ def test_modules_catalog_and_lod():
 
 def test_rock_states_change_surface():
     mossy, fresh, weathered = (tm.build(f"rock_limestone_boulder_m_{v}") for v in (2, 0, 1))
-    assert mossy.m.count("rk_moss") > 20 and fresh.m.count("rk_moss") == 0          # 苔は mossy にだけ
-    assert any(m.endswith("_fresh") for m in fresh.m) and not any(m.endswith("_fresh") for m in mossy.m)   # 欠け面は fresh にだけ
-    assert any(m.endswith("_lichen") for m in weathered.m)                            # 地衣類
+    green = lambda m: float((m.vcol[:, 1] - m.vcol[:, 0]).mean())                         # 苔・地衣類は頂点色(面単位の材質ではない)
+    assert green(mossy) > green(fresh) + 0.02                                          # 苔は mossy に多い
+    bright = lambda m: float((m.vcol.mean(1) > 1.15).mean())
+    gw, gf = tm.build("rock_granite_boulder_m_1"), tm.build("rock_granite_boulder_m_0")
+    assert bright(gw) > bright(gf)                                           # 地衣類(明るい斑)
     assert len({tm.REG[f"rock_{k}_boulder_m_0"]["kind"] for k in ROCKS}) == 5
     assert MATERIALS["rk_granite"]["tex"] != MATERIALS["rk_sandstone"]["tex"]          # 岩種ごとに材質が違う
 
