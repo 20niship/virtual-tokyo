@@ -51,8 +51,16 @@ if doc.scatter:
         allp = np.concatenate([np.asarray(ln.coords) for ln, _ in doc.vectors["roads"]])
         lodc = tuple(allp.mean(0))
     print("instances:", R.add_scatter(doc, load_protos(doc), lodc, half * 1.5 if a.mode == "orbit" else 700 if a.mode == "road" else 200))
-if a.mode == "road":                          # 道路(通常区間と橋)を順に辿る。トンネル区間は飛ばす(カットが入る)
-    pts = np.concatenate([np.c_[np.asarray(ln.coords), np.asarray(pr["z"])] for ln, pr in doc.vectors["roads"]])
+if a.mode == "road":                          # 道路(通常区間・橋・トンネル)を端点でつなぎ順に辿る(トンネル内部も走る)
+    segs = [np.c_[np.asarray(ln.coords), np.asarray(pr["z"])] for ln, pr in list(doc.vectors["roads"]) + list(doc.vectors["tunnels"])]
+    ends = [q[-1, :2] for q in segs]
+    first = next((q for q in segs if all(np.hypot(*(q[0, :2] - e)) > 1.0 for e in ends)), segs[0])      # 他の終点につながらない区間が始点
+    order, rest = [first], [q for q in segs if q is not first]
+    while rest:
+        nxt = min(rest, key=lambda q: np.hypot(*(q[0, :2] - order[-1][-1, :2])))
+        order.append(nxt)
+        rest = [q for q in rest if q is not nxt]
+    pts = np.concatenate(order)
     dd = np.hypot(*np.diff(pts[:, :2], axis=0).T)
     s = np.r_[0, np.cumsum(np.minimum(dd, 2.5))]
     t = np.linspace(0, s[-1], a.frames + 12)
@@ -78,7 +86,7 @@ def pose(f):
         p, q = path[f], path[min(f + 6, len(path) - 1)]
         if np.hypot(*(q[:2] - p[:2])) > 60:           # トンネルで切れた所は直前の向きを保つ
             q = p + (p - path[max(f - 1, 0)]) * 6
-        return (p[0], p[1], p[2] + 2.0 + 0.0), (q[0], q[1], q[2] + 1.8)
+        return (p[0], p[1], p[2] + 1.7), (q[0], q[1], q[2] + 1.6)
     p, q = path[f], path[min(f + 40, len(path) - 1)]
     return (p[0], p[1], zat(*p) + a.alt), (q[0], q[1], zat(*q) + a.alt * 0.5)
 

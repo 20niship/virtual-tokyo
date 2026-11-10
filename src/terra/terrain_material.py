@@ -124,10 +124,10 @@ def build(normal_image=None, bump=0.9, debug=None):
     # 斑の縁は頂点属性(moss/lichen)×ノイズのしきい値を滑らかに(clamp((n - a) * k))で出す。面単位の材質割り当てではない
     soft = lambda n, a, k: mathn("MULTIPLY", mathn("SUBTRACT", n, a), k, True)
     rockw = mathn("ADD", mathn("ADD", r_w, s_w), mathn("MULTIPLY", l_w, 0.45), True)             # 岩・礫の上と、湿った林床の落ち葉の上にも苔
-    mnoise = soft(noise(1.3, 6.0), 0.40, 9.0)
+    mnoise = soft(noise(1.3, 6.0), 0.40, 7.0)
     moss_f = mathn("MULTIPLY", mathn("MULTIPLY", moss, rockw), mnoise, True)
     acc = mix(acc, mix(img(PATHS["moss"], 0.6), (0.9, 0.95, 0.8), 0.3, "MULTIPLY"), mathn("MULTIPLY", moss_f, 0.85), "MIX")
-    lich_f = mathn("MULTIPLY", mathn("MULTIPLY", lichen, r_w), soft(noise(0.55, 5.0), 0.50, 9.0), True)
+    lich_f = mathn("MULTIPLY", mathn("MULTIPLY", lichen, r_w), soft(noise(0.55, 5.0), 0.48, 7.0), True)
     acc = mix(acc, (0.62, 0.60, 0.34), mathn("MULTIPLY", lich_f, 0.5), "MIX")
     # マクロの明暗・色味のムラ(約 45m と約 9m の 2 スケール)と、全体の反射率の抑え(裸地が一様な薄ベージュに見えないように)
     m1 = mathn("ADD", mathn("MULTIPLY", mathn("SUBTRACT", noise(45.0, 3.0), 0.5), 1.9), 0.82)

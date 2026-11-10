@@ -43,6 +43,28 @@ def level_pad(doc, poly, blend=6.0, z=None):
     return z, inside
 
 
+def carve_lane(doc, a, b, za, zb, half=1.8, blend=3.0):
+    """取り付け道 a→b の路盤を、端の標高 za→zb を直線で結んだ高さにする(幅 2*half、外側 blend[m] ですり付け)。ribbon が地面から浮かない"""
+    from scipy.spatial import cKDTree
+    g = doc.grid
+    n = max(int(np.hypot(*(b - a)) / 0.5), 2)
+    t = np.linspace(0, 1, n + 1)
+    pts = np.stack([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], 1)
+    zs = za + (zb - za) * t
+    pad = half + blend + g.res
+    i0, i1 = max(int((pts[:, 0].min() - pad - g.x0) / g.res), 0), min(int((pts[:, 0].max() + pad - g.x0) / g.res) + 1, g.nx)
+    j0, j1 = max(int((pts[:, 1].min() - pad - g.y0) / g.res), 0), min(int((pts[:, 1].max() + pad - g.y0) / g.res) + 1, g.ny)
+    X, Y = g.xy()
+    sl = (slice(j0, j1), slice(i0, i1))
+    d, nn = cKDTree(pts).query(np.stack([X[sl].ravel(), Y[sl].ravel()], 1))
+    w = np.clip(1.0 - (d - half) / blend, 0.0, 1.0)
+    w = (w * w * (3 - 2 * w)).reshape(X[sl].shape)
+    h = doc.layers["height"].astype(np.float64)
+    h[sl] = h[sl] * (1 - w) + zs[nn].reshape(w.shape) * w
+    doc.layers["height"] = h.astype(np.float32)
+    return zs[::4]
+
+
 @node("infra.village")
 class VillageNode(Node):
     """places の各地点の周りに集落を作る。要 infra.road。houses: 1 集落あたりの家屋数の上限 / fields: 畑の数の上限 / radius: 集落の半径 /
@@ -131,8 +153,9 @@ class VillageNode(Node):
                 n_ = max(int(np.hypot(*(b - a)) / 2.0), 2)
                 t = np.linspace(0, 1, n_ + 1)
                 line = np.stack([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], 1)
+                zb = float(hf().sample(np.array([b[0]]), np.array([b[1]]))[0])
+                carve_lane(doc, a, b, zc, zb)
                 zl = hf().sample(line[:, 0], line[:, 1])
-                zl[0] = zc
                 lanes.append((LineString(line), dict(width=3.2, z=[round(float(v), 2) for v in zl], kind="lane")))
                 pads.append((LineString(line).buffer(2.0), dict(width=0.0, clear_width=0.0)))
                 # 畑: 家屋の横(道路と平行にずらす)

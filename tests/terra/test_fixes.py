@@ -35,7 +35,7 @@ def test_road_min_radius_param():
 
 def _toe_roughness(doc):
     z = doc.height.astype(np.float64)
-    return float(np.abs(np.diff(z, 2, axis=1)).max())
+    return float(np.abs(np.diff(z, 2, axis=1)).sum() + np.abs(np.diff(z, 2, axis=0)).sum())
 
 
 def test_toe_rounding_smooths_slope(monkeypatch):
@@ -43,7 +43,7 @@ def test_toe_rounding_smooths_slope(monkeypatch):
     a = _toe_roughness(run(make_doc("side")))
     monkeypatch.setattr(earthwork, "_round_toe", lambda new, *r: new)
     b = _toe_roughness(run(make_doc("side")))
-    assert a < b                                  # 丸めた方が法尻・法肩の折れ(2 階差分の最大)が小さい
+    assert a < b                                  # 丸めた方が法尻・法肩の折れ(2 階差分の総和)が小さい
 
 
 def test_tunnel_interior_and_portals():

@@ -184,8 +184,11 @@ class RoadNode(Node):
                 if pr["kind"] == "tunnel":
                     tun.append((ln, pr))
                     P_ = np.asarray(ln.coords)
-                    for q, _, sc in tunnel.portals(P_):
-                        por.append((Point(q), dict(width=44.0, z=float(np.interp(sc, np.r_[0, np.cumsum(np.hypot(*np.diff(P_, axis=0).T))], pr["z"])))))
+                    sa_ = np.r_[0, np.cumsum(np.hypot(*np.diff(P_, axis=0).T))]
+                    for q, _, sc in tunnel.portals(P_):                 # 坑口: トンネル端 → 坑口 までの切り通しの線(散布の除外。幅 30m)
+                        end = 0.0 if sc < sa_[-1] / 2 else sa_[-1]
+                        line = [(float(np.interp(sf, sa_, P_[:, 0])), float(np.interp(sf, sa_, P_[:, 1]))) for sf in (end, (end + sc) / 2, sc)]
+                        por.append((LineString(line), dict(width=30.0, z=float(np.interp(sc, sa_, pr["z"])))))
             stats["length_m"] += float(np.sum(np.hypot(*np.diff(xy, axis=0).T)))
             grade = np.abs(np.diff(zr)) / np.hypot(*np.diff(xy, axis=0).T)
             stats["max_grade"] = max(stats["max_grade"], float(grade.max()))
