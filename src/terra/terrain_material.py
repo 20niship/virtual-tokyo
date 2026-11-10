@@ -135,7 +135,8 @@ def build(normal_image=None, bump=0.9, debug=None):
     # マクロの明暗・色味のムラ(約 45m と約 9m の 2 スケール)と、全体の反射率の抑え(裸地が一様な薄ベージュに見えないように)
     m1 = mathn("ADD", mathn("MULTIPLY", mathn("SUBTRACT", noise(45.0, 3.0), 0.5), 1.9), 0.82)
     m2 = mathn("ADD", mathn("MULTIPLY", mathn("SUBTRACT", noise(9.0, 4.0), 0.5), 0.8), 1.0)
-    macro = mathn("MULTIPLY", m1, m2)
+    m0 = mathn("ADD", mathn("MULTIPLY", mathn("SUBTRACT", noise(170.0, 3.0), 0.5), 1.1), 0.95)      # 約 170m の明暗ムラ(遠景の山肌がのっぺりしない)
+    macro = mathn("MULTIPLY", mathn("MULTIPLY", m1, m2), m0)
     warm = mix(acc, mix(acc, (1.0, 0.9, 0.78), 1.0, "MULTIPLY"), mathn("MULTIPLY", noise(30.0, 2.0), 1.4, True))      # 暖色/寒色の斑
     acc = mix(warm, (0.78, 0.78, 0.78), 1.0, "MULTIPLY")
     # 樹冠下の光斑(木漏れ日): 落ち葉の層の上に、暖色で明るい斑を ~1m 周期で足す(空の散乱光だけの青暗い無地に見えないように)。控えめな演出
