@@ -21,6 +21,7 @@ ap.add_argument("--lens", type=float, default=0)
 ap.add_argument("--fstop", type=float, default=5.6)
 ap.add_argument("--no-dof", action="store_true")
 ap.add_argument("--stride", type=int, default=0, help="地形メッシュの間引き(0=プロファイル既定: far 4 / near の遠景 2 / legacy 1)")
+ap.add_argument("--road-widen", type=float, default=0, help="路面を太らせる倍率(0=far は 1.7・それ以外は 1.0)")
 ap.add_argument("--no-water", action="store_true")
 ap.add_argument("--no-scatter", action="store_true")
 ap.add_argument("--no-splat", action="store_true", help="biome があっても頂点色表示にする")
@@ -105,7 +106,7 @@ for v in views:
             nrm = R.bake_normal_image(big)
         terr.append(R.terrain_object(doc, box=box, stride=stride, splat=splat, normal_image=nrm))
         R.add_far_plane(doc)
-    R.add_roads(doc)
+    R.add_roads(doc, a.road_widen or (1.7 if a.detail == "far" else 1.0))
     if not a.no_water:
         R.add_water(doc)
         if near is not None:
@@ -122,11 +123,11 @@ for v in views:
             bx = near.meta["near_box"]
             far_doc = Document(doc.grid, doc.seed)
             for k, s in doc.scatter.items():
-                m = np.ones(len(s["pos"]), bool) if k == "road_furniture" else ~((s["pos"][:, 0] > bx[0]) & (s["pos"][:, 0] < bx[2]) & (s["pos"][:, 1] > bx[1]) & (s["pos"][:, 1] < bx[3]))
+                m = np.ones(len(s["pos"]), bool) if k in ("road_furniture", "village") else ~((s["pos"][:, 0] > bx[0]) & (s["pos"][:, 0] < bx[2]) & (s["pos"][:, 1] > bx[1]) & (s["pos"][:, 1] < bx[3]))
                 far_doc.scatter[k] = {f: (val[m] if f != "assets" else val) for f, val in s.items()}
         if a.detail == "far":                                          # 遠景用: 低木・草・地面パッチを省き、木は 2 割間引く
             rs = np.random.default_rng(1)
-            far_doc.scatter = {k: ({f: (val[m] if f != "assets" else val) for f, val in s.items()} if k not in ("shrubs", "ground") else None) for k, s in far_doc.scatter.items()
+            far_doc.scatter = {k: ({f: (val[m] if f != "assets" else val) for f, val in s.items()} if k not in ("shrubs", "ground", "floor") else None) for k, s in far_doc.scatter.items()
                                for m in [rs.random(len(s["pos"])) < (0.8 if k == "trees" else 1.0)]}
             far_doc.scatter = {k: s for k, s in far_doc.scatter.items() if s is not None}
         ninst += R.add_scatter(far_doc, load_protos(far_doc), camp, a.hi_dist)

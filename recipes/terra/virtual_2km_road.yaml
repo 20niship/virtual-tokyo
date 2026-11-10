@@ -1,4 +1,4 @@
-# 仮想 2km 角・2m 格子(T4 の検証): 侵食 → 水系 → 2 集落間の道路(橋・トンネル・切土盛土)→ 再接地 → バイオーム → 散布(道路・橋・坑口を除外)
+# 仮想 2km 角・2m 格子(T4 の検証): 侵食 → 水系 → 2 集落間の道路(橋・トンネル・切土盛土)→ 再接地 → バイオーム → 散布(道路・橋・坑口・集落を除外)
 seed: 7
 grid: {size_m: 2000, res_m: 2, crs: local}
 places: {village_a: [0.608, 0.463], village_b: [0.915, 0.903]}      # 集落の位置(格子比 x, y)
@@ -16,13 +16,15 @@ steps:
   - hydro.rivers: {min_area_km2: 0.03}
   - hydro.lakes: {min_depth: 3.0, min_area_m2: 8000}
   - infra.road: {connect: [village_a, village_b], max_grade: 0.10, allow_tunnel: true, allow_bridge: true, bridge_cost: 16, tunnel_cost: 40}
+  - infra.village: {}                                                # 集落(家屋・畑・取り付け道。敷地を整地)
   - masks.slope: {}
   - hydro.flow: {}
   - biome.jp_forest: {}
   - geology.zones: {}
-  - scatter.trees: {r_m: 3.6, exclude: [road, river, lake, powerline]}
+  - scatter.trees: {r_m: 3.6, exclude: [road, river, lake, powerline, village_pads]}
   - scatter.shrubs: {r_m: 2.6}
   - scatter.rocks: {cliff_deg: 54}
   - scatter.ground: {}
+  - scatter.floor: {exclude: [road, river, lake, powerline, village_pads, portal]}                       # 林床(落ち葉・倒木・枯れ枝・ササ・シダ)
   - infra.furniture: {}
 export: {heightmap: png16, geotiff: true, usd: true, splat: true}

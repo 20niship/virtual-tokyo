@@ -51,7 +51,7 @@ class Rocks(Node):
     density は全体の倍率(near プロファイルは 3〜4)"""
     inputs = ("slope", "aspect")
     scatter_outputs = ("rocks",)
-    defaults = dict(cliff_deg=54.0, boulder_density=0.04, exclude=["river", "lake", "road", "portal"], density=1.0)
+    defaults = dict(cliff_deg=54.0, boulder_density=0.04, exclude=["river", "lake", "road", "portal", "village_pads"], density=1.0)
 
     def run(self, doc, rng):
         p, g = self.params, doc.grid
@@ -113,7 +113,7 @@ class Ground(Node):
     """地面の質感 module を散布: 土パッチ(土種は soil_type)・河原の砂利/砂パッチ・ガレ場の礫パッチ。パッチは斜面に沿って傾ける。要 geology.zones"""
     inputs = ("soil_type", "slope", "aspect")
     scatter_outputs = ("ground",)
-    defaults = dict(soil_r_m=4.5, soil_prob=0.3, exclude=["river", "lake", "road", "portal"], density=1.0)
+    defaults = dict(soil_r_m=4.5, soil_prob=0.3, exclude=["river", "lake", "road", "portal", "village_pads"], density=1.0)
 
     def run(self, doc, rng):
         p, g = self.params, doc.grid

@@ -448,12 +448,12 @@ def bake_normal_image(doc: Document, name="terrain_nrm"):
     return im
 
 
-def add_roads(doc: Document):
+def add_roads(doc: Document, widen: float = 1.0):
     """道路の路面(アスファルト+白線)を曲面リボンで描く。橋・トンネルは module(road_furniture)が受け持つ"""
     import bpy
     from vt import render
     from .infra.roadmesh import road_mesh
-    m = road_mesh(doc)
+    m = road_mesh(doc, widen=widen)
     if not m.f:
         return None
     o = bpy.data.objects.new("roads", render.mesh_to_bpy("roads", m))
@@ -471,17 +471,21 @@ def road_poses(doc: Document):
     for P, z, pr in roads:
         if pr["kind"] != "road":
             continue
-        for i in range(2, len(P) - 8):
+        for i in range(10, len(P) - 8):
             d = P[i + 1] - P[i - 1]
             d /= max(np.hypot(*d), 1e-9)
             for sgn in (1, -1):
                 n = np.array([d[1], -d[0]]) * sgn
                 cut = zat(*(P[i] + n * 8.0)) - z[i]
-                if cut > best[0]:
-                    best = (cut, (P[i], d, n, z[i]))
+                if cut > best[0] and not any(np.hypot(*(P[i] - np.array(q.coords[0]))) < 40 for q, _ in doc.vectors.get("portals", [])):
+                    best = (cut, (P[i], d, n, z[i]), (P, z))
     if best[1] is not None:
         c, d, n, zr = best[1]
         loc = c - d * 16                                        # 路面の上(道路の手前)から切土法面を見る
+        P_, z_ = best[2]
+        k_ = int(np.argmin(np.hypot(*(P_ - c).T)))
+        k0 = max(k_ - 8, 0)                                     # 曲がっていても路面上の点(16m 手前)から撮る
+        loc, zr = P_[k0], float(z_[k0])
         out["road_cut"] = ((loc[0], loc[1], zr + 1.8), (c[0] + n[0] * 7, c[1] + n[1] * 7, zr + 3.5))
     br = [(pr["length"], P, z) for P, z, pr in roads if pr["kind"] == "bridge"]
     if br:
@@ -501,6 +505,27 @@ def road_poses(doc: Document):
         n = np.array([d[1], -d[0]])
         loc = P[0] - d * 28 + n * 8
         out["road_portal"] = ((loc[0], loc[1], zat(*loc) + 2.2), (P[0, 0], P[0, 1], pr["z"][0] + 2.5))
+    if tn:
+        ln, pr = max(tn, key=lambda t: t[1]["length"])
+        P, z = np.asarray(ln.coords), np.asarray(pr["z"])
+        k = min(5, len(P) - 1)
+        d = P[k] - P[0]
+        d /= max(np.hypot(*d), 1e-9)
+        loc = P[0] + d * 3.0
+        out["road_tunnel_in"] = ((loc[0], loc[1], z[0] + 1.5), (P[0, 0] + d[0] * 60, P[0, 1] + d[1] * 60, z[0] + 3.0))
+    vs = doc.scatter.get("village")
+    if vs is not None and len(vs["yaw"]):
+        c = vs["pos"].mean(0)
+        far_ = np.hypot(*(vs["pos"][:, :2] - c[:2]).T).max()
+        out["road_village"] = ((c[0] - far_ * 0.3 - 30, c[1] - far_ * 0.9 - 30, c[2] + 18 + far_ * 0.3), (c[0], c[1], c[2] + 2))
+    if roads:
+        P, z = max([(P, z) for P, z, pr in roads if pr["kind"] == "road"], key=lambda t: len(t[0]))
+        k = len(P) // 2
+        d = P[k + 3] - P[k]
+        d /= max(np.hypot(*d), 1e-9)
+        n = np.array([d[1], -d[0]])
+        loc = P[k] - d * 9 + n * 2.0
+        out["road_ditch"] = ((loc[0], loc[1], z[k] + 1.2), (P[k, 0] + d[0] * 8 + n[0] * 3.5, P[k, 1] + d[1] * 8 + n[1] * 3.5, z[k] + 0.2))
     if roads:
         allp = np.concatenate([P for P, _, _ in roads])
         c = (allp.min(0) + allp.max(0)) / 2

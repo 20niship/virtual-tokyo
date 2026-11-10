@@ -20,4 +20,5 @@ steps:
   - scatter.shrubs: {r_m: 2.6}
   - scatter.rocks: {cliff_deg: 54}
   - scatter.ground: {}
+  - scatter.floor: {}
 export: {heightmap: png16, geotiff: true, usd: true, splat: true}

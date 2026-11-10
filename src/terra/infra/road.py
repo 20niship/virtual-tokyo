@@ -155,7 +155,7 @@ class RoadNode(Node):
     outputs = ("height", "road", "cutfill")
     vec_outputs = ("roads", "tunnels", "portals", "road_stats")
     defaults = dict(connect=["village_a", "village_b"], max_grade=0.10, allow_tunnel=True, allow_bridge=True, width=6.5, clear_width=22.0,
-                    min_cover=10.0, min_radius=15.0, tunnel_cost=40.0, bridge_cost=16.0, factor=4, cut_ratio=0.8, fill_ratio=1.5)
+                    min_cover=10.0, min_radius=15.0, shoulder=0.8, tunnel_cost=40.0, bridge_cost=16.0, factor=4, cut_ratio=0.8, fill_ratio=1.5)
 
     def run(self, doc, rng):
         import time
@@ -178,14 +178,14 @@ class RoadNode(Node):
                 raise RuntimeError(f"経路が見つからない: {a} -> {b}(max_grade={p['max_grade']} を上げるか橋・トンネルを許可する)")
             xy, kind, za = centerline(route, min_radius=p["min_radius"])
             zr, pinned = design_profile(za, kind, xy, p["max_grade"])
-            res = earthwork.carve(doc, xy, zr, kind, p["width"], p["cut_ratio"], p["fill_ratio"], river, road_mask)
+            res = earthwork.carve(doc, xy, zr, kind, p["width"], p["cut_ratio"], p["fill_ratio"], river, road_mask, shoulder=p["shoulder"])
             segs += _segments(xy, zr, kind, p["width"], p["clear_width"])
             for ln, pr in _segments(xy, zr, kind, p["width"], p["clear_width"]):
                 if pr["kind"] == "tunnel":
                     tun.append((ln, pr))
-                    for end, sgn in ((0, 1), (-1, -1)):
-                        c = ln.coords[end]
-                        por.append((Point(c), dict(width=30.0, z=pr["z"][end])))
+                    P_ = np.asarray(ln.coords)
+                    for q, _, sc in tunnel.portals(P_):
+                        por.append((Point(q), dict(width=44.0, z=float(np.interp(sc, np.r_[0, np.cumsum(np.hypot(*np.diff(P_, axis=0).T))], pr["z"])))))
             stats["length_m"] += float(np.sum(np.hypot(*np.diff(xy, axis=0).T)))
             grade = np.abs(np.diff(zr)) / np.hypot(*np.diff(xy, axis=0).T)
             stats["max_grade"] = max(stats["max_grade"], float(grade.max()))

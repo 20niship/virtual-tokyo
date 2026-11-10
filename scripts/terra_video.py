@@ -36,7 +36,7 @@ splat = R.splat_from_doc(doc)
 R.terrain_object(doc, splat=splat, stride=a.stride)
 R.add_far_plane(doc)
 R.add_water(doc)
-R.add_roads(doc)
+R.add_roads(doc, 1.5)
 g = doc.grid
 cx, cy = g.x0 + g.nx * g.res / 2, g.y0 + g.ny * g.res / 2
 half = g.nx * g.res / 2

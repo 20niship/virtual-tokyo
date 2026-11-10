@@ -15,10 +15,11 @@ from .masks.terrain import slope_aspect
 
 # near の散布ステップ(far のステップより密)。density は間隔 r を 1/sqrt(density) にする倍率
 NEAR_STEPS = [
-    ("scatter.trees", dict(r_m=3.4, exclude=["river", "lake"])),
+    ("scatter.trees", dict(r_m=3.4, exclude=["river", "lake", "road", "portal", "village_pads"])),
     ("scatter.shrubs", dict(r_m=0.9, shrub_density=0.2, grass_density=0.9, scale_mul=1.1, forest_grass=0.7)),
     ("scatter.rocks", dict(cliff_deg=54, density=4.0, boulder_density=0.12)),
     ("scatter.ground", dict(density=3.0)),
+    ("scatter.floor", dict(density=4.0)),
 ]
 STRATA = np.array([0.15, 0.5, 1.0, 0.6, 0.3])        # 岩種ごとの層理の強さ [花崗岩, 安山岩, 砂岩, 石灰岩, 凝灰岩]
 STEP = np.array([2.5, 1.4, 0.7, 1.1, 1.0])           # 層理の段の間隔[m]

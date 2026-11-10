@@ -22,12 +22,14 @@ TREES = {
     "kuromatsu": dict(mods=["veg_kuromatsu_{z}_0_summer", "veg_kuromatsu_{z}_1_summer"], H=dict(s=5.0, m=8.0, l=12.0)),
     "sugi": dict(mods=["terra_sugi_{z}"], H=dict(s=12.0, m=20.0, l=28.0)),
     "shirabiso": dict(mods=["terra_shirabiso_{z}"], H=dict(s=6.0, m=10.0, l=15.0)),
+    "hinoki": dict(mods=["terra_hinoki_{z}"], H=dict(s=10.0, m=17.0, l=24.0)),
+    "karamatsu": dict(mods=["terra_karamatsu_{z}"], H=dict(s=9.0, m=15.0, l=22.0)),
 }
 # バイオームごとの樹種の重み
 MIX = {
-    EVERGREEN: dict(shii=0.40, kusunoki=0.08, sugi=0.30, keyaki=0.10, sakura=0.04, kuromatsu=0.08),
-    DECIDUOUS: dict(keyaki=0.32, tokaikaede=0.26, sakura=0.08, sugi=0.14, kuromatsu=0.06, shii=0.14),
-    CONIFER: dict(shirabiso=0.78, kuromatsu=0.22),
+    EVERGREEN: dict(shii=0.38, kusunoki=0.08, sugi=0.22, hinoki=0.12, keyaki=0.08, sakura=0.04, kuromatsu=0.08),
+    DECIDUOUS: dict(keyaki=0.30, tokaikaede=0.24, sakura=0.08, sugi=0.12, hinoki=0.06, kuromatsu=0.06, shii=0.14),
+    CONIFER: dict(shirabiso=0.58, karamatsu=0.24, kuromatsu=0.18),
     DWARF_PINE: dict(kuromatsu=1.0),
     RIPARIAN: dict(keyaki=0.45, tokaikaede=0.25, sakura=0.1, sugi=0.2),
     GRASS: dict(sakura=1.0),
@@ -41,7 +43,7 @@ def exclusion(doc, names, margin=2.0):
     ex = np.zeros(g.shape, bool)
     shapes = []
     for n in names:
-        key = {"river": "rivers", "lake": "lakes", "road": "roads", "powerline": "powerlines", "portal": "portals"}.get(n, n)
+        key = {"river": "rivers", "lake": "lakes", "road": "roads", "powerline": "powerlines", "portal": "portals", "tunnel": "tunnels"}.get(n, n)
         for geom, pr in doc.vectors.get(key, []):
             w = pr.get("clear_width", pr.get("width", {"roads": 10.0, "powerlines": 25.0}.get(key, 0.0)))        # 道路は伐採帯(clear_width)
             shapes.append((geom.buffer(w / 2 + margin), 1))
@@ -64,7 +66,7 @@ class Trees(Node):
     """樹冠密度(canopy)とバイオームから木を散布。間隔 r_m のポアソンディスク → 密度で間引き → 種を斑状に選ぶ。exclude の領域には置かない。要 biome.jp_forest"""
     inputs = ("canopy", "biome")
     scatter_outputs = ("trees",)
-    defaults = dict(r_m=4.2, exclude=["river", "lake", "road", "portal", "powerline"], season="summer", max_slope=62.0, size_mix=[0.35, 0.45, 0.2])
+    defaults = dict(r_m=4.2, exclude=["river", "lake", "road", "portal", "powerline", "village_pads"], season="summer", max_slope=62.0, size_mix=[0.35, 0.45, 0.2])
 
     def run(self, doc, rng):
         p, g = self.params, doc.grid
@@ -115,7 +117,7 @@ class Shrubs(Node):
     """林床の低木(ツツジ・ツゲ)・湿地のアジサイ・開けた所の草を散布。要 biome.jp_forest"""
     inputs = ("canopy", "biome")
     scatter_outputs = ("shrubs",)
-    defaults = dict(r_m=2.6, exclude=["river", "lake", "road", "portal", "powerline"], shrub_density=0.5, grass_density=0.6, scale_mul=1.0, forest_grass=0.0)
+    defaults = dict(r_m=2.6, exclude=["river", "lake", "road", "portal", "powerline", "village_pads"], shrub_density=0.5, grass_density=0.6, scale_mul=1.0, forest_grass=0.0)
 
     def run(self, doc, rng):
         p, g = self.params, doc.grid

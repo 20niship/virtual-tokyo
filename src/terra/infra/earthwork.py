@@ -30,7 +30,7 @@ def _round_toe(new, zt, dist, ok, wet, hw, shape, res):
     return (n2 * (1 - w) + sm * w).ravel()
 
 
-def carve(doc, xy, z, kind, width, cut_ratio, fill_ratio, river, road_mask, portal_ratio=0.3):
+def carve(doc, xy, z, kind, width, cut_ratio, fill_ratio, river, road_mask, portal_ratio=0.3, shoulder=0.8):
     """doc.height を書き換える。返り値: dict(cut_m3, fill_m3)"""
     g = doc.grid
     x, y, zr, k, d, t = densify(xy, z, kind)
@@ -68,7 +68,7 @@ def carve(doc, xy, z, kind, width, cut_ratio, fill_ratio, river, road_mask, port
     ok = np.isfinite(dist)
     nn = np.where(ok, nn, 0)
     zt = doc.height[sl].ravel().astype(np.float64)
-    hw = width / 2.0
+    hw = width / 2.0 + shoulder          # 舗装の外側の路肩(水平)まで路盤。側溝・縁石・ガードレールはこの上に置く
     zro = zs[nn]
     off = np.maximum(dist - hw, 0.0)
     new = np.where(dist <= hw, zro,
