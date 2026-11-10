@@ -17,7 +17,7 @@ SPEC = {
     "soft": dict(cuts=6, smooth=0.09, chips=0.5, pits=1.5, cracks=2, strata=0.15, wrinkle=0.6, hmap="rockh_soft.png"),
     "coastal": dict(cuts=8, smooth=0.06, chips=0.8, pits=2.6, cracks=5, strata=0.5, wrinkle=1.0, hmap="rockh_karst.png"),
 }
-VARIANTS = ["b0", "b1", "b2", "b3", "b4", "dark", "fresh", "rust", "lich_y", "lich_g", "lich_w", "moss", "moss_dry", "moss_dk", "wet"]
+VARIANTS = ["b0", "b1", "b2", "b3", "b4", "dark", "fresh", "rust", "lich_y", "lich_g", "lich_w", "moss", "moss_dry", "moss_dk", "wet", "algae", "salt", "streak"]
 
 
 def _rgb(h):
@@ -36,9 +36,10 @@ def register_materials(kinds):
         hm = SPEC[sp["shape"]]["hmap"] if sp["shape"] in SPEC else "rockh_round.png"
         tints = {"b0": base * 0.62, "b1": base * 0.8, "b2": base * 0.98, "b3": base * 1.12, "b4": base * 1.25, "dark": base * 0.5, "fresh": np.array([235, 232, 226.]),
                  "rust": base * 0.8 + np.array([48, 26, 8.]), "lich_y": np.array([190, 182, 110.]), "lich_g": np.array([135, 150, 118.]), "lich_w": np.array([218, 216, 200.]),
-                 "moss": np.array([96, 150, 38.]), "moss_dry": np.array([150, 156, 62.]), "moss_dk": np.array([70, 100, 40.]), "wet": base * 0.45}
+                 "moss": np.array([96, 150, 38.]), "moss_dry": np.array([150, 156, 62.]), "moss_dk": np.array([70, 100, 40.]), "wet": base * 0.45,
+                 "algae": np.array([42, 54, 36.]), "salt": np.array([226, 222, 210.]), "streak": base * 0.42 + np.array([6, 5, 3.])}
         for v, t in tints.items():
-            rough = {"wet": 0.45, "dark": 0.95, "fresh": 0.85, "moss": 1.0, "moss_dry": 1.0, "moss_dk": 1.0}.get(v, 0.9)
+            rough = {"wet": 0.45, "dark": 0.95, "fresh": 0.85, "moss": 1.0, "moss_dry": 1.0, "moss_dk": 1.0, "algae": 0.5, "salt": 0.95, "streak": 0.93}.get(v, 0.9)
             if v.startswith("moss"):
                 mat = _tex("moss.png", 0.4, 1.0, 1.6, tint={"moss": "#8fa874", "moss_dry": "#aaa672", "moss_dk": "#5f7a48"}[v])
             else:
@@ -257,7 +258,7 @@ def _mesh_from(f):
     return v + f.o, fa, nr
 
 
-def _assign(v, fa, nr, f, st, kind, rng_np, R, zbase, spec):
+def _assign(v, fa, nr, f, st, kind, rng_np, R, zbase, spec, ctx=None):
     """面ごとの材質: 明度の色ムラ・窪み・稜線・新鮮面・錆び・地衣類・苔・濡れ"""
     cen = v[fa].mean(1)
     fn = nr[fa].mean(1)
@@ -278,6 +279,8 @@ def _assign(v, fa, nr, f, st, kind, rng_np, R, zbase, spec):
     fine = fbm_pts(cen + 120.0, rng_np, 0.12 * R, 0.02 * R)
     # 基本: 明度 5 段(色ムラ)。凸の稜線は明るく、窪みは暗く(参考: 稜線のドライブラシ)
     lvl = 0.5 + 0.5 * tone + 0.12 * fine + 0.22 * np.tanh(cs * 0.35) - 0.2 * np.tanh(-cl * 0.4)
+    if ctx:
+        lvl = lvl + ctx["tone"](cen)                                                   # 層ごとの色の濃淡
     idx = np.clip((lvl * 5).astype(int), 0, 4)
     var = np.array(["b0", "b1", "b2", "b3", "b4"], dtype=object)[idx]
     w = st["weathering"]
@@ -285,19 +288,31 @@ def _assign(v, fa, nr, f, st, kind, rng_np, R, zbase, spec):
         var = np.where(fresh > 0.4 + 0.5 * (1 - st["chipped"]), "fresh", var)
     stain = (streak > 0.45 - 0.4 * w) & (nz < 0.55) & (w > 0.3)
     var = np.where(stain, "rust", var)
-    dark = (crack > 0.25) | (cl < -0.9) & (cs < -0.2)
+    dark = (crack > (0.6 if ctx else 0.25)) | (cl < (np.percentile(cl, 3) if ctx else -0.9)) & (cs < (np.percentile(cs, 20) if ctx else -0.2))
     var = np.where(dark, "dark", var)
     wet = (cen[:, 2] < zbase + 0.07 * R) & (w > 0.3)
     var = np.where(wet, "wet", var)
+    if ctx:
+        sx = fbm_pts(cen * np.array([4.0, 4.0, 0.25]) + 33.0, rng_np, 0.9 * R, 0.1 * R)     # 縦長ノイズ = 雨筋
+        var = np.where((sx > 0.52) & (nz < 0.8) & (cen[:, 2] > ctx.get("zw", -9) + 1.5) & (var != "dark"), "streak", var)
+        if "zw" in ctx:                                                                # 水際: 濡れ帯・藻・塩の帯
+            zr = cen[:, 2] - ctx["zw"] - 0.25 * fine
+            var = np.where(zr < 1.9, np.where(zr < 0.9, "wet", "salt"), var)
+            var = np.where((zr < 0.45) & (fine > -0.25), "algae", var)
+            var = np.where((zr >= 0.9) & (zr < 1.9) & (pat2 < 0.1), np.where(var == "salt", "b4", var), var)
+    pit = (cs < np.percentile(cs, 7)) if ctx else (cs < -1.1) & (cl > -0.9)
+    if ctx:
+        var = np.where(pit & (ctx.get("pitdark", 0) > 0), "dark", var)
     if st["lichen"] > 0:
-        lich = (nz > 0.05) & (pat * 0.7 + pat2 * 0.3 > 0.55 - 0.9 * st["lichen"]) & ~dark
+        edge = 0.4 * np.tanh(cs * 0.6) if ctx else 0.0                                 # 地衣類は上面・縁(凸部)に優先
+        lich = (nz > 0.05) & (pat * 0.7 + pat2 * 0.3 + edge + (0.25 * nz if ctx else 0) > 0.55 - 0.9 * st["lichen"]) & ~dark
         kind_l = np.where(pat2 > 0.2, "lich_y", np.where(pat2 > -0.2, "lich_g", "lich_w"))
         var = np.where(lich, kind_l, var)
     if st["moss"] > 0:
         mm = st["moss"]
         up = np.clip((nz - 0.1) / 0.6, 0, 1)                                            # 上向きほど苔が乗る
         cav = np.clip(-cl * 0.6, 0, 1)                                                  # 窪み・割れ目に溜まる
-        cover = up * (0.7 + 0.5 * mm) + 0.6 * cav + 0.3 * crack
+        cover = up * (0.7 + 0.5 * mm) + (0.25 if ctx else 0.6) * cav + 0.3 * crack
         thr = 1.0 - 1.05 * mm
         mossy = (cover + 0.5 * pat + 0.18 * fine) > thr
         var = np.where(mossy, np.where(pat2 > 0.35, "moss_dry", np.where(fine < -0.15, "moss_dk", "moss")), var)
