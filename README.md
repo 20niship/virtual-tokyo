@@ -260,6 +260,10 @@ export: {usd: true, splat: true}
 - 林床: `scatter.floor`(落ち葉の層・倒木・枯れ枝・ササ・シダの module `lib_floor.py`)と、地形材質の光斑(木漏れ日)・落ち葉の暖色化・苔の滑らかな縁。針葉樹(スギ・ヒノキ・シラビソ・カラマツ)は専用の葉アトラス(`scripts/terra_textures_conifer.py` で手続き生成)を使う。
 - キャッシュ(`<out>/.cache`)のキーにはノードのサブパッケージと `core/` のコードの内容ハッシュが入るので、コードを変えると `--no-cache` なしで自動的に再計算される。
 
+### Terra の岩のディテール(岩石海岸・岩山)
+
+`gen.sea_cliff`(海食崖・波食棚・海)、強化した `gen.crags`(層ごとの硬さ・節理ブロック)、SDF の海食崖/岩山 module(`rock_*_seacliff_*` / `rock_*_spire_*`、near/far/hi)。`recipes/terra/rocky_coast.yaml`・`rock_peak.yaml`、`scripts/terra_rock_ref.py`(参照に近い構図で module を描く)、`scripts/terra_modules_sheet.py crag|crag_hi`。差・対応・ポリ数は `docs/terra/rock_detail.md`。
+
 ### Terra の道路(T4)
 
 `infra.road` が 2 集落(レシピの `places`)の間に最小コスト経路で道路を引き、縦断勾配の上限(既定 10%)を守って切土・盛土し、谷・川は橋、尾根はトンネルにする。`infra.furniture` がガードレール・擁壁・落石防止網・カーブミラー・側溝(U 字溝/蓋付き)・縁石・橋桁・橋脚・坑口とトンネル内部(覆工・路面・照明)の module を置く。最小曲線半径は既定 15m(`infra.road.min_radius`)。`infra.village` は道路沿いに集落(家屋 3 種・納屋・畑・取り付け道)を作り敷地を整地する。木・低木・岩・林床は道路の伐採帯・坑口・集落を避けて散布される。

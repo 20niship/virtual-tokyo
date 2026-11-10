@@ -43,7 +43,11 @@ def exclusion(doc, names, margin=2.0):
     ex = np.zeros(g.shape, bool)
     shapes = []
     for n in names:
-        key = {"river": "rivers", "lake": "lakes", "road": "roads", "powerline": "powerlines", "portal": "portals", "tunnel": "tunnels"}.get(n, n)
+        if n == "no_veg":                                                       # gen.sea_cliff の崖・波食棚・海(植生を置かない)
+            if "no_veg" in doc.layers:
+                ex |= doc.layers["no_veg"] > 0.5
+            continue
+        key = {"river": "rivers", "lake": "lakes", "road": "roads", "powerline": "powerlines", "portal": "portals"}.get(n, n)
         for geom, pr in doc.vectors.get(key, []):
             w = pr.get("clear_width", pr.get("width", {"roads": 10.0, "powerlines": 25.0}.get(key, 0.0)))        # 道路は伐採帯(clear_width)
             shapes.append((geom.buffer(w / 2 + margin), 1))
@@ -66,7 +70,7 @@ class Trees(Node):
     """樹冠密度(canopy)とバイオームから木を散布。間隔 r_m のポアソンディスク → 密度で間引き → 種を斑状に選ぶ。exclude の領域には置かない。要 biome.jp_forest"""
     inputs = ("canopy", "biome")
     scatter_outputs = ("trees",)
-    defaults = dict(r_m=4.2, exclude=["river", "lake", "road", "portal", "powerline", "village_pads"], season="summer", max_slope=62.0, size_mix=[0.35, 0.45, 0.2])
+    defaults = dict(r_m=4.2, exclude=["river", "lake", "road", "portal", "powerline", "no_veg", "village_pads"], season="summer", max_slope=62.0, size_mix=[0.35, 0.45, 0.2])
 
     def run(self, doc, rng):
         p, g = self.params, doc.grid
@@ -117,7 +121,7 @@ class Shrubs(Node):
     """林床の低木(ツツジ・ツゲ)・湿地のアジサイ・開けた所の草を散布。要 biome.jp_forest"""
     inputs = ("canopy", "biome")
     scatter_outputs = ("shrubs",)
-    defaults = dict(r_m=2.6, exclude=["river", "lake", "road", "portal", "powerline", "village_pads"], shrub_density=0.5, grass_density=0.6, scale_mul=1.0, forest_grass=0.0)
+    defaults = dict(r_m=2.6, exclude=["river", "lake", "road", "portal", "powerline", "no_veg", "village_pads"], shrub_density=0.5, grass_density=0.6, scale_mul=1.0, forest_grass=0.0)
 
     def run(self, doc, rng):
         p, g = self.params, doc.grid

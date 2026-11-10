@@ -7,6 +7,7 @@ import numpy as np
 from vt import tree_gen as _tg
 from vt.materials import MATERIALS as _MAT
 
+from . import lib_rock_crag as _crag
 from . import lib_rock_sdf as _sdf
 from .lib_rock import _ICO, _ico, _noise_dir
 from .registry import reg
@@ -19,6 +20,8 @@ KINDS = {   # shape: round(丸い)/angular(角)/slab(板状・層理)/karst(溶�
     "limestone": dict(ja="石灰岩", tex="rock_limestone.png", tint="#f0eee8", size=2.6, shape="karst", cuts=6, rough=0.22, flat=0.7),
     "tuff": dict(ja="凝灰岩", tex="rock_tuff.png", tint="#e0d8c0", size=2.4, shape="soft", cuts=4, rough=0.20, flat=0.75),
     "seashore": dict(ja="海辺の岩(波食・穴だらけ)", tex="rock_granite.png", hi_gain=0.78, tint="#c8c6c0", size=2.4, shape="coastal", cuts=8, rough=0.18, flat=0.65),
+    "seacliff": dict(ja="海食崖の堆積岩(層理・黄褐)", tex="rock_sandstone.png", hi_gain=1.5, tint="#dcc48f", size=2.4, shape="slab", cuts=8, rough=0.12, flat=0.5),
+    "peakrock": dict(ja="岩山の多孔質岩(暗灰褐・蜂の巣)", tex="rock_granite.png", hi_gain=1.0, tint="#8a847c", size=2.0, shape="coastal", cuts=8, rough=0.18, flat=0.65),
     "river": dict(ja="川原の丸石", tex="rock_river.png", tint="#d0ccc4", size=1.0, shape="round", cuts=0, rough=0.06, flat=0.62),
 }
 STATES = [
@@ -264,6 +267,12 @@ def _cliff_geo(kind, v, lod):
     return fn
 
 
+def _crag_fn(kind, form, v, lod):
+    def fn(m, W, H, rng):
+        _crag.build_crag(m, kind, form, STATES[v], rng, lod, 22.0 if form == "seacliff" else 1.7)
+    return fn
+
+
 for _k in KINDS:
     for _v in range(len(STATES)):
         for _lod in ("near", "far", "hi"):
@@ -275,3 +284,10 @@ for _k in KINDS:
                 reg(f"rock_{_k}_cliff_{_v}{_sfx}", _cliff_geo(_k, _v, _lod), W=14.0, H=9.0, lod=_lod, kind=_k)
             if _k == "andesite" and _lod != "hi":
                 reg(f"rock_{_k}_column_{_v}{_sfx}", _rock_fn(_k, "column", _v, _lod), W=4.0, H=3.0, lod=_lod, kind=_k)
+
+CRAG_FORMS = {"seacliff": ("seacliff", "sandstone", "limestone", "tuff"), "spire": ("peakrock", "granite", "andesite", "tuff", "sandstone", "seashore")}
+for _form, _ks in CRAG_FORMS.items():       # 岩山・海食崖の大形状(near / far / hi)
+    for _k in _ks:
+        for _v in range(len(STATES)):
+            for _lod, _sfx in (("near", ""), ("far", "_far"), ("hi", "_hi")):
+                reg(f"rock_{_k}_{_form}_{_v}{_sfx}", _crag_fn(_k, _form, _v, _lod), W=22.0 if _form == "seacliff" else 5.0, H=13.0 if _form == "seacliff" else 4.0, lod=_lod, kind=_k)

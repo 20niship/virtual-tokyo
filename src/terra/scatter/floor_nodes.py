@@ -23,7 +23,7 @@ class Floor(Node):
     """density: 全体の密度倍率(near は 3〜4 倍にする)"""
     inputs = ("canopy", "biome")
     scatter_outputs = ("floor",)
-    defaults = dict(density=1.0, exclude=["river", "lake", "road", "portal", "powerline", "village_pads"], min_canopy=0.3)
+    defaults = dict(density=1.0, exclude=["river", "lake", "road", "portal", "powerline", "no_veg", "village_pads"], min_canopy=0.3)
 
     def run(self, doc, rng):
         p, g = self.params, doc.grid
