@@ -29,6 +29,9 @@ def _hex(c):
     return "#%02x%02x%02x" % tuple(int(np.clip(v, 0, 255)) for v in c)
 
 
+KINDS_TINT = {}   # 岩種 → 材質の tint(hi_gain 込み, sRGB hex)。頂点色が相対値なので基準に使う
+
+
 def register_materials(kinds):
     """岩種ごとに 14 変種(明度 5 段・暗色・新鮮面・錆び・地衣類 3・苔 2・濡れ)の材質を登録。Bump は高さ画像"""
     for k, sp in kinds.items():
@@ -38,6 +41,8 @@ def register_materials(kinds):
                  "rust": base * 0.8 + np.array([48, 26, 8.]), "lich_y": np.array([190, 182, 110.]), "lich_g": np.array([135, 150, 118.]), "lich_w": np.array([218, 216, 200.]),
                  "moss": np.array([96, 150, 38.]), "moss_dry": np.array([150, 156, 62.]), "moss_dk": np.array([70, 100, 40.]), "wet": base * 0.45,
                  "algae": np.array([42, 54, 36.]), "salt": np.array([226, 222, 210.]), "streak": base * 0.42 + np.array([6, 5, 3.])}
+        KINDS_TINT[k] = _hex(base)
+        _MAT[f"rkv_{k}"] = dict(_tex(sp["tex"], sp["size"] * 0.22, 0.88, 1.0, tint=_hex(base)), hmap=hm, vcol=True)   # 頂点色で塗る 1 材質(crag 形)
         for v, t in tints.items():
             rough = {"wet": 0.45, "dark": 0.95, "fresh": 0.85, "moss": 1.0, "moss_dry": 1.0, "moss_dk": 1.0, "algae": 0.5, "salt": 0.95, "streak": 0.93}.get(v, 0.9)
             if v.startswith("moss"):

@@ -170,6 +170,8 @@ def get_material(mid):
         if img is not None:       # 看板テクスチャを自発光させる(夜の店舗看板・広告)
             L(img.outputs["Color"], bsdf.inputs["Emission Color"])
             bsdf.inputs["Emission Strength"].default_value = 3.0 if TIME == "night" else 1.2
+    if d.get("vcol"):
+        _vertex_color(nt, bsdf, d)
     _mat_cache[mid] = mat
     return mat
 
@@ -235,6 +237,37 @@ def _image(name, noncolor=False):
             im.colorspace_settings.name = "Non-Color"
         _img_cache[key] = im
     return _img_cache[key]
+
+
+def _vertex_color(nt, bsdf, d):
+    """頂点色(color attribute "Col")を Base Color に乗せる(岩の色ムラ・層・地衣類を面単位でなく頂点で塗る)。
+    細かい粒状の色ムラ(3D ノイズ)と、全面の微細な凹凸(Bump)もここで足す"""
+    N, L = nt.nodes.new, nt.links.new
+    link = next((k for k in nt.links if k.to_socket == bsdf.inputs["Base Color"]), None)
+    src = link.from_socket if link else None
+    va = N("ShaderNodeVertexColor"); va.layer_name = "Col"
+    mx = N("ShaderNodeMix"); mx.data_type = "RGBA"; mx.blend_type = "MULTIPLY"; mx.inputs[0].default_value = 1.0
+    if src is not None:
+        L(src, mx.inputs[6])
+    else:
+        mx.inputs[6].default_value = bsdf.inputs["Base Color"].default_value
+    L(va.outputs["Color"], mx.inputs[7])
+    tc = N("ShaderNodeTexCoord")
+    gr = N("ShaderNodeTexNoise"); gr.noise_dimensions = "3D"; gr.inputs["Scale"].default_value = 38.0; gr.inputs["Detail"].default_value = 8.0; gr.inputs["Roughness"].default_value = 0.65
+    L(tc.outputs["Object"], gr.inputs["Vector"])
+    gm = N("ShaderNodeMapRange"); gm.inputs[3].default_value = 0.72; gm.inputs[4].default_value = 1.22
+    L(gr.outputs["Fac"], gm.inputs[0])
+    m2 = N("ShaderNodeMix"); m2.data_type = "RGBA"; m2.blend_type = "MULTIPLY"; m2.inputs[0].default_value = 1.0
+    L(mx.outputs[2], m2.inputs[6]); L(gm.outputs[0], m2.inputs[7])
+    L(m2.outputs[2], bsdf.inputs["Base Color"])
+    bn = N("ShaderNodeTexNoise"); bn.noise_dimensions = "3D"; bn.inputs["Scale"].default_value = 55.0; bn.inputs["Detail"].default_value = 10.0; bn.inputs["Roughness"].default_value = 0.7
+    L(tc.outputs["Object"], bn.inputs["Vector"])
+    bp = N("ShaderNodeBump"); bp.inputs["Strength"].default_value = 0.9; bp.inputs["Distance"].default_value = 0.02
+    L(bn.outputs["Fac"], bp.inputs["Height"])
+    old = next((k for k in nt.links if k.to_socket == bsdf.inputs["Normal"]), None)
+    if old is not None:
+        L(old.from_socket, bp.inputs["Normal"])
+    L(bp.outputs[0], bsdf.inputs["Normal"])
 
 
 def _textured(nt, bsdf, d, base, texc, objinfo):
@@ -381,6 +414,10 @@ def mesh_to_bpy(name, mesh):
     me.polygons.foreach_set("material_index", np.array([idx[m] for m in mesh.m], dtype=np.int32))
     me.polygons.foreach_set("use_smooth", np.full(len(mesh.f), bool(getattr(mesh, "smooth", False)), dtype=bool))
     me.update(calc_edges=True)
+    vc = getattr(mesh, "vcol", None)
+    if vc is not None:                                    # 頂点色(岩など): 材質の vcol=True が "Col" を読む
+        ca = me.color_attributes.new("Col", "FLOAT_COLOR", "POINT")
+        ca.data.foreach_set("color", np.concatenate([np.asarray(vc, np.float32), np.ones((len(vc), 1), np.float32)], 1).ravel())
     # UV(ボックス投影, メートル基準)
     uv = me.uv_layers.new(name="UVMap")
     P = verts[loop_vi]

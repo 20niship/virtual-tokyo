@@ -122,7 +122,7 @@ class Rocks(Node):
             tal = doc.layers["shore_talus"] * (~exclusion(doc, p["exclude"], 0.5))
             xy, jj, ii = sample(g, 2.6 / np.sqrt(D), int(rng.integers(1 << 30)), (np.clip(tal, 0, 1) * 0.9).astype(np.float32), None, rng)
             sz = rng.choice(3, len(xy), p=[0.5, 0.35, 0.15])
-            add(xy, [f"rock_seashore_boulder_{'sml'[z]}_{v}" for z, v in zip(sz, rng.integers(0, 4, len(xy)))], rng.uniform(0.7, 1.7, len(xy)), np.zeros(len(xy)), rng.uniform(0, 6.28, len(xy)))
+            add(xy, [f"rock_seashore_boulder_{'sml'[z]}_{v}" for z, v in zip(sz, rng.choice([1, 3], len(xy)))], rng.uniform(0.7, 1.7, len(xy)), np.zeros(len(xy)), rng.uniform(0, 6.28, len(xy)))
         if p["peaks"]:      # 岩山: 高所の急斜面に尖塔・突起 module
             hi = doc.height > np.quantile(doc.height, 0.86)
             m = hi & (slope > 28) & ~ex

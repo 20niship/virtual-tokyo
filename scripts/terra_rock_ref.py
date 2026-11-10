@@ -65,7 +65,7 @@ if a.scene == "coast":
     rng = np.random.default_rng(3)
     for i in range(a.boulders):                                       # 水際の暗い転石
         x = (i - a.boulders / 2) * 3.3 + rng.uniform(-1, 1)
-        nf += put(f"rock_seashore_boulder_{'ml'[i % 2]}_{i % 4}", (x, -3.2 - rng.uniform(0, 1.8), 0.0), rng.uniform(0, 360), rng.uniform(0.7, 1.4))
+        nf += put(f"rock_seashore_boulder_{'ml'[i % 2]}_{1 + 2 * (i % 2)}", (x, -3.2 - rng.uniform(0, 1.8), 0.0), rng.uniform(0, 360), rng.uniform(0.7, 1.4))
     loc, tgt = (tuple(map(float, cam[:3])), tuple(map(float, cam[3:]))) if cam else ((-4, -46, 3.0), (0, 0, 6.2))
     lens = 50
 else:
