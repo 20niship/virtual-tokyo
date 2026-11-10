@@ -110,6 +110,9 @@ def build(normal_image=None, bump=0.9, debug=None):
             c = mix(c, t1c, 1.0, "MULTIPLY")                          # 岩種の色味
         elif k in TINT:
             c = mix(c, TINT[k], 1.0, "MULTIPLY")
+        if k == "grass":                                                           # 草の色ムラ: 約 7m の斑で黄褐色(枯れ草)・約 2m の斑で明暗。一様な緑のフェルトに見えないように
+            c = mix(c, mix(c, (1.3, 1.08, 0.7), 1.0, "MULTIPLY"), mathn("MULTIPLY", mathn("SUBTRACT", noise(7.0, 3.0), 0.40), 2.2, True))
+            c = mix(c, mix(c, (0.78, 0.82, 0.7), 1.0, "MULTIPLY"), mathn("MULTIPLY", mathn("SUBTRACT", noise(2.2, 3.0), 0.45), 2.5, True))
         cols[k] = c
     wts = dict(grass=g_w, litter=l_w, rock=r_w, scree=s_w, soil=so_w, alpine=al_w)
     acc = None

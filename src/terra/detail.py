@@ -78,6 +78,8 @@ def make_near_doc(doc: Document, center, half=120.0, res=0.5, seed=0, scatter=Tr
     if "road" in L:                                                        # 路盤は水平なまま(微細起伏を路面から 1m 離れるまで消す)
         from scipy.ndimage import distance_transform_edt
         rd = nn(L["road"]) > 0
+        if "village" in L:                                                 # 集落の敷地・取り付け道も平らなまま(ribbon が浮かない)
+            rd = rd | (nn(L["village"]) > 0)
         out.layers["road"] = rd.astype(np.float32)
         if rd.any():
             d = d * np.clip((distance_transform_edt(~rd) * res - 1.0) / 6.0, 0, 1)

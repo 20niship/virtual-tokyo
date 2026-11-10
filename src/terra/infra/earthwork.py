@@ -51,7 +51,8 @@ def carve(doc, xy, z, kind, width, cut_ratio, fill_ratio, river, road_mask, port
             ratio[sel] = portal_ratio
             mine = np.zeros(len(x), bool)
             mine[r] = True
-            deep |= mine & ((t <= t[r[0]] + PORTAL_LEN + 70) | (t >= t[r[-1]] - PORTAL_LEN - 70)) & ~sel
+            a0, a1 = t[r[0]] + PORTAL_LEN, t[r[-1]] - PORTAL_LEN          # 坑口の位置(弧長)。盛土は坑口の壁(の位置)から奥へ。点の 5m 手前まで 1、6m で 0
+            deep |= mine & (((t >= a0 + 5) & (t <= a0 + 86)) | ((t <= a1 - 5) & (t >= a1 - 86)))
     if not use.any():
         return dict(cut_m3=0.0, fill_m3=0.0)
     from ..masks.terrain import slope_aspect
@@ -85,8 +86,8 @@ def carve(doc, xy, z, kind, width, cut_ratio, fill_ratio, river, road_mask, port
     new = np.where(wet, zt, new)
     if deep.any():              # 坑口の奥の土被り不足(探索は坑口付近の土被りを免除する)を、地形を盛って坑口の壁の高さ(7m)以上にする
         dt = cKDTree(np.stack([x[deep], y[deep]], 1))
-        d2, n2 = dt.query(np.stack([X[sl].ravel(), Y[sl].ravel()], 1), distance_upper_bound=9.0)
-        w = np.where(np.isfinite(d2), np.clip((9.0 - np.where(np.isfinite(d2), d2, 9.0)) / 4.0, 0, 1), 0.0)
+        d2, n2 = dt.query(np.stack([X[sl].ravel(), Y[sl].ravel()], 1), distance_upper_bound=6.0)
+        w = np.where(np.isfinite(d2), np.clip(6.0 - np.where(np.isfinite(d2), d2, 6.0), 0, 1), 0.0)
         floor = zr[deep][np.where(np.isfinite(d2), n2, 0)] + COVER
         new = np.where(w > 0, new + (np.maximum(new, floor) - new) * w, new)
     new = _round_toe(new, zt, dist, ok, wet, hw, (j1 - j0, i1 - i0), g.res)
