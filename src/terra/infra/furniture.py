@@ -5,11 +5,18 @@ from __future__ import annotations
 import math
 
 import numpy as np
+from scipy.ndimage import binary_closing, binary_opening, gaussian_filter1d
 
 from ..core.node import Node, node
 from . import bridge
 
 HW = 3.25         # 路盤の半幅(幅 6.5m)
+
+
+def _runs(mask, gap, minlen):
+    """真偽列の整形: gap 以下の隙間を埋め、minlen 未満の連続を捨てる"""
+    m = binary_closing(np.pad(mask, 3), np.ones(2 * gap + 1, bool))[3:-3] if mask.any() else mask
+    return binary_opening(m, np.ones(minlen, bool)) if m.any() else m
 
 
 def _frame(P, z, i, j):
@@ -53,24 +60,28 @@ class Furniture(Node):
 
     def _road(self, P, z, hf, p, rows):
         n = len(P)
-        for i in range(0, n - 2, 2):
-            d, L, yaw, pit = _frame(P, z, i, i + 2)
-            c = (P[i] + P[i + 2]) / 2
-            zc = (z[i] + z[i + 2]) / 2
-            right = np.array([d[1], -d[0]])
-            for side in (1, -1):
-                sd = right * side
-                h_out = float(hf.sample(np.array([c[0] + sd[0] * 5.5]), np.array([c[1] + sd[1] * 5.5]))[0])
-                h_in = float(hf.sample(np.array([c[0] + sd[0] * 5.0]), np.array([c[1] + sd[1] * 5.0]))[0])
+        idx = list(range(0, n - 2, 2))
+        fr = [(_frame(P, z, i, i + 2), (P[i] + P[i + 2]) / 2, (z[i] + z[i + 2]) / 2) for i in idx]
+        for side in (1, -1):
+            hin, hout = [], []
+            for (d, L, yaw, pit), c, zc in fr:
+                sd = np.array([d[1], -d[0]]) * side
+                hout.append(zc - float(hf.sample(np.array([c[0] + sd[0] * 5.5]), np.array([c[1] + sd[1] * 5.5]))[0]))
+                hin.append(float(hf.sample(np.array([c[0] + sd[0] * 5.0]), np.array([c[1] + sd[1] * 5.0]))[0]) - zc)
+            # 擁壁・ガードレールの区間は平滑化+短い隙間を埋め+短い断片を捨てる(端がギザギザにならない)
+            guard = _runs(gaussian_filter1d(np.array(hout), 1.0, mode="nearest") > p["guard_drop"], 2, 3)
+            wall = _runs(gaussian_filter1d(np.array(hin), 1.5, mode="nearest") > p["wall_cut"], 2, 3)
+            for q_, ((d, L, yaw, pit), c, zc) in enumerate(fr):
+                i = idx[q_]
+                sd = np.array([d[1], -d[0]]) * side
                 yaw_s = yaw if side > 0 else yaw + math.pi
-                if zc - h_out > p["guard_drop"]:
+                if guard[q_]:
                     q = c + sd * (HW - 0.2)
                     rows.append((q[0], q[1], zc, yaw_s, pit, "road_guardrail_4m"))
-                cut = h_in - zc
-                if cut > p["wall_cut"]:
+                if wall[q_]:
                     q = c + sd * (HW + 0.45)
                     rows.append((q[0], q[1], zc - 0.1, yaw_s, pit, "road_retwall_4m"))
-                if cut > p["net_cut"] and i % 4 == 0:
+                if hin[q_] > p["net_cut"] and wall[q_] and i % 4 == 0:
                     q = c + sd * (HW + 2.2)
                     hz = float(hf.sample(np.array([q[0]]), np.array([q[1]]))[0])
                     rows.append((q[0], q[1], max(zc + 2.4, hz - 0.3), yaw_s, 0.0, "road_rocknet_8m"))

@@ -20,6 +20,16 @@ def densify(xy, z, kind, step=1.0):
     return np.interp(t, d, xy[:, 0]), np.interp(t, d, xy[:, 1]), np.interp(t, d, z), k, d, t
 
 
+def _round_toe(new, zt, dist, ok, wet, hw, shape, res):
+    """法尻・法肩の折れ(地形との min/max の尾根・格子の階段)をガウスで丸める。路盤は触らず、変更のあった所とその周囲 ~3 セルだけ、路盤から離れるほど強く混ぜる"""
+    from scipy.ndimage import binary_dilation, gaussian_filter
+    n2, z2, d2 = new.reshape(shape), zt.reshape(shape), dist.reshape(shape)
+    sm = gaussian_filter(n2, 1.6 / res * 1.0 + 0.8, mode="nearest")
+    near = binary_dilation(np.abs(n2 - z2) > 1e-3, iterations=3)
+    w = np.clip((d2 - hw - 0.5) / 4.0, 0.0, 1.0) * near * (~(wet.reshape(shape))) * ok.reshape(shape)
+    return (n2 * (1 - w) + sm * w).ravel()
+
+
 def carve(doc, xy, z, kind, width, cut_ratio, fill_ratio, river, road_mask, portal_ratio=0.3):
     """doc.height を書き換える。返り値: dict(cut_m3, fill_m3)"""
     g = doc.grid
@@ -66,6 +76,7 @@ def carve(doc, xy, z, kind, width, cut_ratio, fill_ratio, river, road_mask, port
     new = np.where(ok, new, zt)
     wet = (river[sl].ravel() > 0) | (doc.layers.get("water_depth", np.zeros(g.shape, np.float32))[sl].ravel() > 0.05)
     new = np.where(wet, zt, new)
+    new = _round_toe(new, zt, dist, ok, wet, hw, (j1 - j0, i1 - i0), g.res)
     dz = new - zt
     cell = g.res ** 2
     cut, fill = float(-dz[dz < 0].sum() * cell), float(dz[dz > 0].sum() * cell)
