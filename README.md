@@ -255,6 +255,10 @@ export: {usd: true, splat: true}
 - 岩・土・砂利の module(`src/terra/modules/lib_rock_geo.py`, `lib_soil.py`, `lib_gravel.py`)は 約 450 個(各 near / `_far`)。一覧とポリ数は `docs/terra/modules_geo.md`、近接の違和感と対応は `docs/terra/closeup.md`。
   `uv run python scripts/terra_modules_build.py`(usdc 書き出し+一覧更新)、`scripts/terra_modules_sheet.py rocks|forms|soils|gravel|far`(コンタクトシート)、`scripts/terra_profiles.sh`(3 プロファイルのレンダと統計)。
 
+### Terra の岩のディテール(岩石海岸・岩山)
+
+`gen.sea_cliff`(海食崖・波食棚・海)、強化した `gen.crags`(層ごとの硬さ・節理ブロック)、SDF の海食崖/岩山 module(`rock_*_seacliff_*` / `rock_*_spire_*`、near/far/hi)。`recipes/terra/rocky_coast.yaml`・`rock_peak.yaml`、`scripts/terra_rock_ref.py`(参照に近い構図で module を描く)、`scripts/terra_modules_sheet.py crag|crag_hi`。差・対応・ポリ数は `docs/terra/rock_detail.md`。
+
 ### Terra の道路(T4)
 
 `infra.road` が 2 集落(レシピの `places`)の間に最小コスト経路で道路を引き、縦断勾配の上限(既定 10%)を守って切土・盛土し、谷・川は橋、尾根はトンネルにする。`infra.furniture` がガードレール・擁壁・落石防止網・カーブミラー・橋桁・橋脚・坑口の module を置く。木・低木・岩は道路の伐採帯と坑口を避けて散布される。
