@@ -255,6 +255,11 @@ export: {usd: true, splat: true}
 - 岩・土・砂利の module(`src/terra/modules/lib_rock_geo.py`, `lib_soil.py`, `lib_gravel.py`)は 約 450 個(各 near / `_far`)。一覧とポリ数は `docs/terra/modules_geo.md`、近接の違和感と対応は `docs/terra/closeup.md`。
   `uv run python scripts/terra_modules_build.py`(usdc 書き出し+一覧更新)、`scripts/terra_modules_sheet.py rocks|forms|soils|gravel|far`(コンタクトシート)、`scripts/terra_profiles.sh`(3 プロファイルのレンダと統計)。
 
+### Terra の道路(T4)
+
+`infra.road` が 2 集落(レシピの `places`)の間に最小コスト経路で道路を引き、縦断勾配の上限(既定 10%)を守って切土・盛土し、谷・川は橋、尾根はトンネルにする。`infra.furniture` がガードレール・擁壁・落石防止網・カーブミラー・橋桁・橋脚・坑口の module を置く。木・低木・岩は道路の伐採帯と坑口を避けて散布される。
+`recipes/terra/virtual_2km_road.yaml`、`uv run python scripts/terra_render.py <doc> --view road --detail near`、`scripts/terra_video.py <doc> --mode road`、`scripts/terra_road_compare.py`(道路あり/なしの前後比較)。仕組みと統計は `docs/terra/infra.md`、既定値(原文で確認できた数値は無く設計上の既定値)は `docs/terra/infra_defaults.md`。
+
 ## データの出典・ライセンス
 
 - 地図データ: © OpenStreetMap contributors(ODbL)。このリポジトリの生成物のうちOSM由来の形状は、ODbLの帰属表示が必要。

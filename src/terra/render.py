@@ -446,3 +446,70 @@ def bake_normal_image(doc: Document, name="terrain_nrm"):
     im.pixels.foreach_set(px.ravel())
     im.pack()
     return im
+
+
+def add_roads(doc: Document):
+    """道路の路面(アスファルト+白線)を曲面リボンで描く。橋・トンネルは module(road_furniture)が受け持つ"""
+    import bpy
+    from vt import render
+    from .infra.roadmesh import road_mesh
+    m = road_mesh(doc)
+    if not m.f:
+        return None
+    o = bpy.data.objects.new("roads", render.mesh_to_bpy("roads", m))
+    bpy.context.scene.collection.objects.link(o)
+    return o
+
+
+def road_poses(doc: Document):
+    """道路の検証用カメラ: cut=切土法面(道路の手前から)/ bridge=最長の橋(斜め前から)/ portal=トンネル坑口(手前から)/ road=路面の目線"""
+    hf = doc.heightfield()
+    zat = lambda x, y: float(hf.sample(np.array([x]), np.array([y]))[0])
+    out = {}
+    roads = [(np.asarray(ln.coords), np.asarray(pr["z"]), pr) for ln, pr in doc.vectors.get("roads", [])]
+    best = (0.0, None)
+    for P, z, pr in roads:
+        if pr["kind"] != "road":
+            continue
+        for i in range(2, len(P) - 8):
+            d = P[i + 1] - P[i - 1]
+            d /= max(np.hypot(*d), 1e-9)
+            for sgn in (1, -1):
+                n = np.array([d[1], -d[0]]) * sgn
+                cut = zat(*(P[i] + n * 8.0)) - z[i]
+                if cut > best[0]:
+                    best = (cut, (P[i], d, n, z[i]))
+    if best[1] is not None:
+        c, d, n, zr = best[1]
+        loc = c - d * 16                                        # 路面の上(道路の手前)から切土法面を見る
+        out["road_cut"] = ((loc[0], loc[1], zr + 1.8), (c[0] + n[0] * 7, c[1] + n[1] * 7, zr + 3.5))
+    br = [(pr["length"], P, z) for P, z, pr in roads if pr["kind"] == "bridge"]
+    if br:
+        L, P, z = max(br, key=lambda t: t[0])
+        mid = P[len(P) // 2]
+        d = P[-1] - P[0]
+        d /= max(np.hypot(*d), 1e-9)
+        n = np.array([d[1], -d[0]])
+        loc = mid + n * max(25.0, L * 0.5) - d * 10
+        out["road_bridge"] = ((loc[0], loc[1], zat(*loc) + 6.0), (mid[0], mid[1], float(z[len(z) // 2])))
+    tn = doc.vectors.get("tunnels", [])
+    if tn:
+        ln, pr = max(tn, key=lambda t: t[1]["length"])
+        P = np.asarray(ln.coords)
+        d = P[3] - P[0]
+        d /= max(np.hypot(*d), 1e-9)
+        n = np.array([d[1], -d[0]])
+        loc = P[0] - d * 28 + n * 8
+        out["road_portal"] = ((loc[0], loc[1], zat(*loc) + 2.2), (P[0, 0], P[0, 1], pr["z"][0] + 2.5))
+    if roads:
+        allp = np.concatenate([P for P, _, _ in roads])
+        c = (allp.min(0) + allp.max(0)) / 2
+        ext = float(np.ptp(allp, axis=0).max())
+        out["road_aerial"] = ((c[0] - ext * 0.5, c[1] - ext * 0.6, zat(*c) + ext * 0.45), (c[0], c[1], zat(*c) - 20))
+        out["road_aerial2"] = ((c[0] + ext * 0.6, c[1] - ext * 0.2, zat(*c) + ext * 0.4), (c[0], c[1], zat(*c) - 20))
+        P, z, pr = max(roads, key=lambda t: len(t[0]) if t[2]["kind"] == "road" else 0)
+        i = len(P) // 3
+        d = P[min(i + 6, len(P) - 1)] - P[i]
+        d /= max(np.hypot(*d), 1e-9)
+        out["road_surface"] = ((P[i, 0], P[i, 1], z[i] + 1.7), (P[i, 0] + d[0] * 40, P[i, 1] + d[1] * 40, z[min(i + 20, len(z) - 1)] + 1.5))
+    return out
