@@ -255,9 +255,14 @@ export: {usd: true, splat: true}
 - 岩・土・砂利の module(`src/terra/modules/lib_rock_geo.py`, `lib_soil.py`, `lib_gravel.py`)は 約 450 個(各 near / `_far`)。一覧とポリ数は `docs/terra/modules_geo.md`、近接の違和感と対応は `docs/terra/closeup.md`。
   `uv run python scripts/terra_modules_build.py`(usdc 書き出し+一覧更新)、`scripts/terra_modules_sheet.py rocks|forms|soils|gravel|far`(コンタクトシート)、`scripts/terra_profiles.sh`(3 プロファイルのレンダと統計)。
 
+### Terra の林床・針葉樹・キャッシュ
+
+- 林床: `scatter.floor`(落ち葉の層・倒木・枯れ枝・ササ・シダの module `lib_floor.py`)と、地形材質の光斑(木漏れ日)・落ち葉の暖色化・苔の滑らかな縁。針葉樹(スギ・ヒノキ・シラビソ・カラマツ)は専用の葉アトラス(`scripts/terra_textures_conifer.py` で手続き生成)を使う。
+- キャッシュ(`<out>/.cache`)のキーにはノードのサブパッケージと `core/` のコードの内容ハッシュが入るので、コードを変えると `--no-cache` なしで自動的に再計算される。
+
 ### Terra の道路(T4)
 
-`infra.road` が 2 集落(レシピの `places`)の間に最小コスト経路で道路を引き、縦断勾配の上限(既定 10%)を守って切土・盛土し、谷・川は橋、尾根はトンネルにする。`infra.furniture` がガードレール・擁壁・落石防止網・カーブミラー・橋桁・橋脚・坑口の module を置く。木・低木・岩は道路の伐採帯と坑口を避けて散布される。
+`infra.road` が 2 集落(レシピの `places`)の間に最小コスト経路で道路を引き、縦断勾配の上限(既定 10%)を守って切土・盛土し、谷・川は橋、尾根はトンネルにする。`infra.furniture` がガードレール・擁壁・落石防止網・カーブミラー・側溝(U 字溝/蓋付き)・縁石・橋桁・橋脚・坑口とトンネル内部(覆工・路面・照明)の module を置く。最小曲線半径は既定 15m(`infra.road.min_radius`)。`infra.village` は道路沿いに集落(家屋 3 種・納屋・畑・取り付け道)を作り敷地を整地する。木・低木・岩・林床は道路の伐採帯・坑口・集落を避けて散布される。
 `recipes/terra/virtual_2km_road.yaml`、`uv run python scripts/terra_render.py <doc> --view road --detail near`、`scripts/terra_video.py <doc> --mode road`、`scripts/terra_road_compare.py`(道路あり/なしの前後比較)。仕組みと統計は `docs/terra/infra.md`、既定値(原文で確認できた数値は無く設計上の既定値)は `docs/terra/infra_defaults.md`。
 
 ## データの出典・ライセンス

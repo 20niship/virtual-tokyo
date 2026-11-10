@@ -24,14 +24,14 @@ def _rect(cx, cy, hx, hy, yaw):
 def level_pad(doc, poly, blend=6.0, z=None):
     """多角形の内側を水平(z=内側の平均標高)にし、外側 blend[m] で地形へ滑らかにすり付ける。返り値: z"""
     from scipy.ndimage import distance_transform_edt
-    from shapely.vectorized import contains
+    from shapely import contains_xy
     g = doc.grid
     x0, y0, x1, y1 = poly.buffer(blend + 2 * g.res).bounds
     i0, i1 = max(int((x0 - g.x0) / g.res), 0), min(int((x1 - g.x0) / g.res) + 1, g.nx)
     j0, j1 = max(int((y0 - g.y0) / g.res), 0), min(int((y1 - g.y0) / g.res) + 1, g.ny)
     X, Y = g.xy()
     sl = (slice(j0, j1), slice(i0, i1))
-    inside = contains(poly, X[sl], Y[sl])
+    inside = contains_xy(poly, X[sl], Y[sl])
     h = doc.layers["height"].astype(np.float64)
     if z is None:
         z = float(h[sl][inside].mean()) if inside.any() else float(h[sl].mean())

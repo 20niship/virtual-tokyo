@@ -228,7 +228,11 @@ def photo_setup(doc, res, samples, time="day"):
     from . import modules  # noqa: F401  (rock_* 材質を vt.materials へ登録)
     _patch_textures()
     render.HAZE_K["day"] = 5e-5      # 山岳は数 km 先まで見えるので都市用(1.6e-4)より薄く: 5km で約22%
-    return render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65), time=time, realism=True)
+    sc = render.init_scene(res, samples, sun_dir=(0.5, -0.45, 0.65), time=time, realism=True)
+    import os
+    if os.environ.get("TERRA_RENDER_CPU"):          # GPU メモリが他の処理で埋まっているとき用
+        sc.cycles.device = "CPU"
+    return sc
 
 
 def make_camera(doc, view, box=None, lens=0, fstop=5.6, dof=True, seed=0, pose=None):
@@ -516,8 +520,9 @@ def road_poses(doc: Document):
     vs = doc.scatter.get("village")
     if vs is not None and len(vs["yaw"]):
         c = vs["pos"].mean(0)
-        far_ = np.hypot(*(vs["pos"][:, :2] - c[:2]).T).max()
-        out["road_village"] = ((c[0] - far_ * 0.3 - 30, c[1] - far_ * 0.9 - 30, c[2] + 18 + far_ * 0.3), (c[0], c[1], c[2] + 2))
+        h = vs["pos"][int(np.argmin(np.hypot(*(vs["pos"][:, :2] - c[:2]).T)))]          # 集落の中心に最も近い建物を、斜め上から
+        loc = h[:2] + np.array([-26.0, -26.0])
+        out["road_village"] = ((loc[0], loc[1], max(zat(*loc), float(h[2])) + 9.0), (h[0], h[1], h[2] + 2.0))
     if roads:
         P, z = max([(P, z) for P, z, pr in roads if pr["kind"] == "road"], key=lambda t: len(t[0]))
         k = len(P) // 2

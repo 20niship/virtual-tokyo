@@ -19,7 +19,7 @@ NEAR_STEPS = [
     ("scatter.shrubs", dict(r_m=0.9, shrub_density=0.2, grass_density=0.9, scale_mul=1.1, forest_grass=0.7)),
     ("scatter.rocks", dict(cliff_deg=54, density=4.0, boulder_density=0.12)),
     ("scatter.ground", dict(density=3.0)),
-    ("scatter.floor", dict(density=4.0)),
+    ("scatter.floor", dict(density=1.6)),
 ]
 STRATA = np.array([0.15, 0.5, 1.0, 0.6, 0.3])        # 岩種ごとの層理の強さ [花崗岩, 安山岩, 砂岩, 石灰岩, 凝灰岩]
 STEP = np.array([2.5, 1.4, 0.7, 1.1, 1.0])           # 層理の段の間隔[m]

@@ -29,7 +29,7 @@ def _leaf(m, c, ang, ln, mat):
 
 def _leaves(v, lod):
     def fn(m, W, H, rng):
-        n = {"near": 520, "far": 40}[lod]
+        n = {"near": 150, "far": 24}[lod]
         R = 1.5
         base = len(m.v)
         k = 14 if lod == "near" else 6
